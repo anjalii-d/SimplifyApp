@@ -1,41 +1,30 @@
 // App.js
 import React, { useState, useEffect } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+
+// Import auth and db directly from your firebaseConfig.js
+import { auth, db } from './firebaseConfig'; // Now importing 'auth' directly
+import { onAuthStateChanged } from 'firebase/auth'; // Only need onAuthStateChanged here
 
 // Import your screens
-import LoginScreen from './LoginScreen'; // Import the new LoginScreen
+import LoginScreen from './LoginScreen';
 import HomeScreen from './HomeScreen';
+import AddStoryScreen from './AddStoryScreen';
+import RealityFeedScreen from './RealityFeedScreen'; // Ensure RealityFeedScreen is imported
+import Money101Screen from './Money101Screen'; // Ensure Money101Screen is imported
+import PathPeekScreen from './PathPeekScreen'; // Ensure PathPeekScreen is imported
+import ProfileScreen from './ProfileScreen'; // Ensure ProfileScreen is imported
 
-// Firebase configuration (ensure these global variables are defined in your environment)
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // Using appId for consistency
 
-// Initialize Firebase outside the component to prevent re-initialization
-let app, db, auth;
-if (Object.keys(firebaseConfig).length > 0) {
-  app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-  auth = getAuth(app);
-} else {
-  console.error("Firebase config is missing. Please ensure __firebase_config is set.");
-}
+const Stack = createStackNavigator();
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true); // New state for auth loading
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
   useEffect(() => {
-    // If Firebase is not initialized, we can't proceed with auth
-    if (!auth) {
-      setIsLoadingAuth(false);
-      console.error("Firebase Auth is not initialized. Cannot check auth state.");
-      return;
-    }
-
     // Listen for authentication state changes
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -43,39 +32,10 @@ export default function App() {
         console.log("User is signed in:", user.uid);
         setIsLoggedIn(true);
       } else {
-        // No user is signed in. Attempt anonymous sign-in if no custom token provided.
-        console.log("No user signed in. Attempting anonymous sign-in or custom token sign-in.");
-        if (initialAuthToken) {
-          signInWithCustomToken(auth, initialAuthToken)
-            .then(() => {
-              console.log("Signed in with custom token.");
-              setIsLoggedIn(true);
-            })
-            .catch((error) => {
-              console.error("Error signing in with custom token:", error);
-              // Fallback to anonymous if custom token fails for some reason
-              signInAnonymously(auth)
-                .then(() => {
-                  console.log("Signed in anonymously after custom token failure.");
-                  setIsLoggedIn(true);
-                })
-                .catch((anonError) => {
-                  console.error("Error signing in anonymously:", anonError);
-                  setIsLoggedIn(false); // Auth failed
-                });
-            });
-        } else {
-          // If no custom token, sign in anonymously by default
-          signInAnonymously(auth)
-            .then(() => {
-              console.log("Signed in anonymously.");
-              setIsLoggedIn(true);
-            })
-            .catch((error) => {
-              console.error("Error signing in anonymously:", error);
-              setIsLoggedIn(false); // Auth failed
-            });
-        }
+        // No user is signed in. We will now rely on the LoginScreen
+        // to handle sign-in/sign-up and then onAuthStateChanged will detect it.
+        console.log("No user signed in. Displaying Login Screen.");
+        setIsLoggedIn(false);
       }
       setIsLoadingAuth(false); // Auth check complete
     });
@@ -93,12 +53,30 @@ export default function App() {
     );
   }
 
-  // Render LoginScreen if not logged in, otherwise render HomeScreen
-  if (!isLoggedIn) {
-    return <LoginScreen onLoginSuccess={() => setIsLoggedIn(true)} />;
-  } else {
-    return <HomeScreen />;
-  }
+  return (
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {isLoggedIn ? (
+          // If logged in, show HomeScreen and other app screens
+          <>
+            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="AddStory" component={AddStoryScreen} />
+            {/* Register other main screens that HomeScreen might navigate to directly if needed,
+                though HomeScreen's internal state handles most of its child screen rendering.
+                It's good practice to register them here if they are targets for navigation. */}
+            <Stack.Screen name="RealityFeed" component={RealityFeedScreen} />
+            <Stack.Screen name="Money101" component={Money101Screen} />
+            <Stack.Screen name="PathPeek" component={PathPeekScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+          </>
+        ) : (
+          // If not logged in, show LoginScreen.
+          // We no longer pass onLoginSuccess as a prop, as onAuthStateChanged handles state change.
+          <Stack.Screen name="Login" component={LoginScreen} />
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
 }
 
 const styles = StyleSheet.create({

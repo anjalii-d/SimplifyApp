@@ -3,21 +3,22 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, TextInput } from 'react-native';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from './firebaseConfig';
+import { getAuth } from 'firebase/auth'; // Import getAuth to potentially get current user's ID for display
 
-export default function RealityFeedScreen() {
+export default function RealityFeedScreen({ navigation }) { // Receive navigation prop
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeFilter, setActiveFilter] = useState('latest'); // State for active filter
-  const [tagSearch, setTagSearch] = useState(''); // State for tag search input
+  const [activeFilter, setActiveFilter] = useState('latest');
+  const [tagSearch, setTagSearch] = useState('');
 
   // Dummy filter options based on wireframe
   const filterOptions = ['Latest', 'Tags'];
 
   useEffect(() => {
-    // Firebase query for stories, ordered by date descending (latest)
-    // We'll expand this to handle other filters and tag search later
-    const q = query(collection(db, 'stories'), orderBy('date', 'desc'));
+    // Query to the 'stories' collection, ordered by timestamp descending
+    // This matches the 'timestamp' field saved by AddStoryScreen
+    const q = query(collection(db, 'stories'), orderBy('timestamp', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedStories = [];
@@ -25,14 +26,12 @@ export default function RealityFeedScreen() {
         const data = doc.data();
         fetchedStories.push({
           id: doc.id,
-          title: data.title,
-          content: data.content,
-          date: data.date ? data.date.toDate().toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-          }) : 'N/A',
-          // Assuming stories might have tags for future filtering
+          text: data.text, // 'text' is the field from AddStoryScreen
+          userId: data.userId || 'Anonymous', // Display userId
+          timestamp: data.timestamp ? data.timestamp.toDate().toLocaleString() : 'N/A', // Format timestamp
+          likes: data.likes || 0,
+          commentsCount: data.commentsCount || 0,
+          // Assuming stories might have tags for future filtering, though not saved by AddStoryScreen yet
           tags: data.tags || [],
         });
       });
@@ -49,22 +48,25 @@ export default function RealityFeedScreen() {
 
   const renderStoryItem = ({ item }) => (
     <View style={styles.storyCard}>
-      <Text style={styles.storyTitle}>{item.title}</Text>
-      <Text style={styles.storyContent}>{item.content}</Text>
-      <Text style={styles.storyDate}>{item.date}</Text>
-      {item.tags && item.tags.length > 0 && (
-        <View style={styles.tagsContainer}>
-          {item.tags.map((tag, index) => (
-            <Text key={index} style={styles.tagText}>#{tag}</Text>
-          ))}
-        </View>
-      )}
+      <Text style={styles.storyContent}>{item.text}</Text>
+      <View style={styles.storyFooter}>
+        <Text style={styles.storyMeta}>Posted by: {item.userId.substring(0, 8)}...</Text> {/* Display truncated userId */}
+        <Text style={styles.storyMeta}>{item.timestamp}</Text>
+      </View>
+      <View style={styles.storyActions}>
+        <TouchableOpacity style={styles.actionButton}>
+          <Text style={styles.actionText}>❤️ {item.likes}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionButton}>
+          <Text style={styles.actionText}>💬 {item.commentsCount}</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
   const handleAddStory = () => {
-    console.log("Add your story button pressed!");
-    // Future functionality: Navigate to a story submission screen
+    // Navigate to the AddStoryScreen
+    navigation.navigate('AddStory');
   };
 
   const handleSearchIconPress = () => {
@@ -278,19 +280,44 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 3,
   },
-  storyTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+  storyContent: { // Changed from storyTitle to storyContent for main text
+    fontSize: 16,
     color: '#34495e',
-    marginBottom: 5,
-  },
-  storyContent: {
-    fontSize: 15,
-    color: '#555',
-    lineHeight: 22,
+    lineHeight: 24,
     marginBottom: 10,
   },
-  tagsContainer: {
+  storyFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 5,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    paddingTop: 10,
+  },
+  storyMeta: {
+    fontSize: 12,
+    color: '#7f8c8d',
+  },
+  storyActions: {
+    flexDirection: 'row',
+    marginTop: 10,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 15,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 15,
+    backgroundColor: '#f8f8f8',
+  },
+  actionText: {
+    fontSize: 14,
+    color: '#3498db',
+    fontWeight: 'bold',
+  },
+  tagsContainer: { // Keeping tags container for future use, though not currently populated by AddStoryScreen
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginTop: 5,
@@ -303,12 +330,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 5,
-  },
-  storyDate: {
-    fontSize: 12,
-    color: '#7f8c8d',
-    textAlign: 'right',
-    marginTop: 5,
   },
   noStoriesText: {
     fontSize: 16,

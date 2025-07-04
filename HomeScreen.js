@@ -8,7 +8,7 @@ import Money101Screen from './Money101Screen';
 import PathPeekScreen from './PathPeekScreen'; // Path Peek will now be a main tab
 import ProfileScreen from './ProfileScreen';
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }) { // <-- IMPORTANT: Receive navigation prop here
   // State to manage which tab is currently active in the bottom navigation
   const [activeTab, setActiveTab] = useState('home');
 
@@ -56,13 +56,13 @@ export default function HomeScreen() {
           </ScrollView>
         );
       case 'feed':
-        return <RealityFeedScreen />;
+        return <RealityFeedScreen navigation={navigation} />; // <-- IMPORTANT: Pass navigation prop
       case 'money101':
-        return <Money101Screen />;
+        return <Money101Screen navigation={navigation} />; // <-- IMPORTANT: Pass navigation prop
       case 'pathPeek': // Path Peek is now a direct tab
-        return <PathPeekScreen />;
+        return <PathPeekScreen navigation={navigation} />; // <-- IMPORTANT: Pass navigation prop
       case 'profile':
-        return <ProfileScreen />;
+        return <ProfileScreen navigation={navigation} />; // <-- IMPORTANT: Pass navigation prop
       default:
         return <Text>Something went wrong.</Text>;
     }
