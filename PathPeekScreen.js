@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     backgroundColor: '#f8f8f8',
-    paddingTop: 40, // Adjust for header/status bar
+    paddingTop: 0, // <-- MODIFIED: Removed paddingTop
   },
   contentWrapper: {
     flex: 1,

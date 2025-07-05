@@ -5,7 +5,7 @@ import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { getAuth } from 'firebase/auth'; // Import getAuth to potentially get current user's ID for display
 
-export default function RealityFeedScreen({ navigation }) { // Receive navigation prop
+export default function RealityFeedScreen({ navigation}) { // Receive navigation prop
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     backgroundColor: '#ecf0f1',
-    paddingTop: 0, // Header handles top spacing
+    paddingTop: 0, // <-- MODIFIED: Removed paddingTop
   },
   loadingContainer: {
     flex: 1,
@@ -367,8 +367,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  homeIconPlaceholder: {
-    // This is the home icon next to 'Add your own'
-    fontSize: 24, // Size of the emoji
-  },
+  homeIconPlaceholder: {fontSize: 24,},
 });

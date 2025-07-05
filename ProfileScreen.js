@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     backgroundColor: '#f8f8f8', // Light background
-    paddingTop: 40, // Adjust for status bar
+    paddingTop: 0, // <-- MODIFIED: Removed paddingTop
   },
   // Header Styles
   header: {

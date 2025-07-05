@@ -4,68 +4,70 @@ import { StyleSheet, View, Text, ScrollView, TouchableOpacity, ActivityIndicator
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from './firebaseConfig'; // Import your Firestore database instance
 
-export default function Money101Screen() {
+export default function Money101Screen({ navigation }) { // <-- Receive navigation prop
   const [lessons, setLessons] = useState({}); // Stores lessons grouped by category
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [currentView, setCurrentView] = useState('categories'); // 'categories' or 'lessons' or 'lessonDetail'
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [selectedLesson, setSelectedLesson] = useState(null); // To display a specific lesson
+  const [selectedCategory, setSelectedCategory] = useState(null); // State for selected category
 
   useEffect(() => {
-    // Query all lessons, ordered by category and then by the 'order' field within each category
-    const q = query(collection(db, 'lessons'), orderBy('category'), orderBy('order'));
+    const fetchLessons = () => {
+      // Query all lessons, ordered by category and then by the 'order' field within each category
+      const q = query(collection(db, 'lessons'), orderBy('category'), orderBy('order'));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedLessons = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        fetchedLessons.push({
-          id: doc.id,
-          title: data.title,
-          content: data.content,
-          category: data.category,
-          order: data.order,
-          time: data.time || '5 min read', // Placeholder for 'time' as per wireframe
-          progress: data.progress || '0%', // Placeholder for 'progress'
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const fetchedLessons = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          fetchedLessons.push({
+            id: doc.id,
+            title: data.title,
+            content: data.content, // Ensure content is an array of strings for LessonDetailScreen
+            category: data.category,
+            order: data.order,
+            time: data.time || '5 min read', // Placeholder for 'time' as per wireframe
+            progress: data.progress || '0%', // Placeholder for 'progress'
+          });
         });
+
+        // Group lessons by category
+        const groupedLessons = fetchedLessons.reduce((acc, lesson) => {
+          const category = lesson.category || 'Uncategorized'; // Default if category is missing
+          if (!acc[category]) {
+            acc[category] = [];
+          }
+          acc[category].push(lesson);
+          return acc;
+        }, {});
+
+        setLessons(groupedLessons);
+        setLoading(false);
+
+        // If no category is selected and we have categories, set the first one as default
+        if (Object.keys(groupedLessons).length > 0 && selectedCategory === null) {
+          setSelectedCategory(Object.keys(groupedLessons).sort()[0]);
+        }
+
+      }, (err) => {
+        console.error("Error fetching lessons:", err);
+        setError("Failed to load lessons. Please try again.");
+        setLoading(false);
       });
 
-      // Group lessons by category
-      const groupedLessons = fetchedLessons.reduce((acc, lesson) => {
-        const category = lesson.category || 'Uncategorized'; // Default if category is missing
-        if (!acc[category]) {
-          acc[category] = [];
-        }
-        acc[category].push(lesson);
-        return acc;
-      }, {});
+      return () => unsubscribe();
+    };
 
-      setLessons(groupedLessons);
-      setLoading(false);
-
-      // If no category is selected and we have categories, set the first one as default
-      if (Object.keys(groupedLessons).length > 0 && selectedCategory === null) {
-        setSelectedCategory(Object.keys(groupedLessons).sort()[0]);
-      }
-
-    }, (err) => {
-      console.error("Error fetching lessons:", err);
-      setError("Failed to load lessons. Please try again.");
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    fetchLessons();
   }, [selectedCategory]); // Re-run effect if selectedCategory changes (though not strictly needed for fetch, good for initial selection logic)
 
   const handleCategoryPress = (category) => {
     setSelectedCategory(category);
-    setCurrentView('lessons');
+    // No need to change currentView state here, as we're using navigation for detail
   };
 
-  const handleLessonPress = (lesson) => {
-    setSelectedLesson(lesson);
-    setCurrentView('lessonDetail');
+  const handleLessonPress = (lessonId) => { // Now accepts lessonId directly
+    // Navigate to the LessonDetailScreen, passing the lesson's ID
+    navigation.navigate('LessonDetail', { lessonId: lessonId });
   };
 
   const renderCategoriesView = () => {
@@ -109,7 +111,7 @@ export default function Money101Screen() {
       <View style={styles.contentWrapper}>
         {/* Header for Lessons List View */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentView('categories')} style={styles.backButton}>
+          <TouchableOpacity onPress={() => setSelectedCategory(null)} style={styles.backButton}> {/* Go back to categories */}
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{selectedCategory}</Text>
@@ -124,45 +126,16 @@ export default function Money101Screen() {
               <TouchableOpacity
                 key={lesson.id}
                 style={styles.lessonListItem}
-                onPress={() => handleLessonPress(lesson)}
+                onPress={() => handleLessonPress(lesson.id)} // Pass lesson.id
               >
                 <Text style={styles.lessonListItemTitle}>{lesson.title}</Text>
-                <Text style={styles.lessonListItemDesc}>{lesson.content.substring(0, 70)}...</Text>
+                {/* Display a snippet of content, assuming it's a string for this view */}
+                <Text style={styles.lessonListItemDesc}>{Array.isArray(lesson.content) ? lesson.content[0].substring(0, 70) + '...' : lesson.content.substring(0, 70) + '...'}</Text>
               </TouchableOpacity>
             ))
           ) : (
             <Text style={styles.noContentText}>No lessons in this category yet.</Text>
           )}
-        </ScrollView>
-        {/* Home icon at the bottom */}
-        <View style={styles.homeIconPlaceholder}>
-          <Text style={{ fontSize: 24 }}>🏠</Text>
-        </View>
-      </View>
-    );
-  };
-
-  const renderLessonDetailView = () => {
-    if (!selectedLesson) return null; // Should not happen if logic is correct
-
-    return (
-      <View style={styles.contentWrapper}>
-        {/* Header for Lesson Detail View */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentView('lessons')} style={styles.backButton}>
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{selectedLesson.title}</Text>
-          <View style={styles.headerIconPlaceholder}>
-            <Text style={styles.headerIconText}>?</Text>
-          </View>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.lessonDetailContent}>
-          <Text style={styles.lessonDetailTime}>{selectedLesson.time}</Text>
-          <Text style={styles.lessonDetailTitle}>{selectedLesson.title}</Text>
-          <Text style={styles.lessonDetailDescription}>{selectedLesson.content}</Text>
-          <Text style={styles.lessonDetailProgress}>Progress: {selectedLesson.progress}</Text>
         </ScrollView>
         {/* Home icon at the bottom */}
         <View style={styles.homeIconPlaceholder}>
@@ -189,11 +162,10 @@ export default function Money101Screen() {
     );
   }
 
+  // Render either categories or lessons for a selected category
   return (
     <View style={styles.container}>
-      {currentView === 'categories' && renderCategoriesView()}
-      {currentView === 'lessons' && renderLessonsForCategoryView()}
-      {currentView === 'lessonDetail' && renderLessonDetailView()}
+      {selectedCategory === null ? renderCategoriesView() : renderLessonsForCategoryView()}
     </View>
   );
 }
@@ -203,7 +175,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     backgroundColor: '#f0f4f8', // Light background
-    paddingTop: 40, // Adjust for status bar
+    paddingTop: 0, // <-- MODIFIED: Removed paddingTop
   },
   contentWrapper: {
     flex: 1,
@@ -328,37 +300,6 @@ const styles = StyleSheet.create({
   lessonListItemDesc: {
     fontSize: 14,
     color: '#555',
-  },
-
-  // Lesson Detail Styles
-  lessonDetailContent: {
-    padding: 20,
-    flexGrow: 1,
-  },
-  lessonDetailTime: {
-    fontSize: 14,
-    color: '#7f8c8d',
-    marginBottom: 10,
-    textAlign: 'right',
-  },
-  lessonDetailTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 10,
-  },
-  lessonDetailDescription: {
-    fontSize: 16,
-    color: '#555',
-    lineHeight: 24,
-    marginBottom: 20,
-  },
-  lessonDetailProgress: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#27ae60', // Green for progress
-    textAlign: 'center',
-    marginTop: 20,
   },
 
   noContentText: {

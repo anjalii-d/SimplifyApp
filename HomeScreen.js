@@ -8,7 +8,7 @@ import Money101Screen from './Money101Screen';
 import PathPeekScreen from './PathPeekScreen'; // Path Peek will now be a main tab
 import ProfileScreen from './ProfileScreen';
 
-export default function HomeScreen({ navigation }) { // <-- IMPORTANT: Receive navigation prop here
+export default function HomeScreen({ navigation}) {
   // State to manage which tab is currently active in the bottom navigation
   const [activeTab, setActiveTab] = useState('home');
 
@@ -56,13 +56,13 @@ export default function HomeScreen({ navigation }) { // <-- IMPORTANT: Receive n
           </ScrollView>
         );
       case 'feed':
-        return <RealityFeedScreen navigation={navigation} />; // <-- IMPORTANT: Pass navigation prop
+        return <RealityFeedScreen navigation={navigation} />; // Pass navigation prop
       case 'money101':
-        return <Money101Screen navigation={navigation} />; // <-- IMPORTANT: Pass navigation prop
-      case 'pathPeek': // Path Peek is now a direct tab
-        return <PathPeekScreen navigation={navigation} />; // <-- IMPORTANT: Pass navigation prop
+        return <Money101Screen navigation={navigation} />; // Pass navigation prop
+      case 'pathPeek':
+        return <PathPeekScreen navigation={navigation} />; // Pass navigation prop
       case 'profile':
-        return <ProfileScreen navigation={navigation} />; // <-- IMPORTANT: Pass navigation prop
+        return <ProfileScreen navigation={navigation} />; // Pass navigation prop
       default:
         return <Text>Something went wrong.</Text>;
     }
@@ -71,52 +71,49 @@ export default function HomeScreen({ navigation }) { // <-- IMPORTANT: Receive n
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Main content area */}
-        <View style={styles.contentArea}>
-          {renderTabContent()}
-        </View>
+        {/* Render the content for the active tab */}
+        {renderTabContent()}
 
         {/* Bottom Navigation Bar */}
         <View style={styles.bottomNavBar}>
           <TouchableOpacity
-            style={[styles.navBarButton, activeTab === 'home' && styles.navBarButtonActive]}
+            style={styles.navBarButton}
             onPress={() => setActiveTab('home')}
           >
-            <Text style={styles.navBarIcon}>🏠</Text>
-            <Text style={styles.navBarText}>Home</Text>
+            <Text style={[styles.navBarIcon, activeTab === 'home' && styles.navBarIconActive]}>🏠</Text>
+            <Text style={[styles.navBarText, activeTab === 'home' && styles.navBarTextActive]}>Home</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.navBarButton, activeTab === 'feed' && styles.navBarButtonActive]}
+            style={styles.navBarButton}
             onPress={() => setActiveTab('feed')}
           >
-            <Text style={styles.navBarIcon}>🧾</Text>
-            <Text style={styles.navBarText}>Feed</Text>
+            <Text style={[styles.navBarIcon, activeTab === 'feed' && styles.navBarIconActive]}>📰</Text>
+            <Text style={[styles.navBarText, activeTab === 'feed' && styles.navBarTextActive]}>Feed</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.navBarButton, activeTab === 'money101' && styles.navBarButtonActive]}
+            style={styles.navBarButton}
             onPress={() => setActiveTab('money101')}
           >
-            <Text style={styles.navBarIcon}>📚</Text>
-            <Text style={styles.navBarText}>Money 101</Text>
+            <Text style={[styles.navBarIcon, activeTab === 'money101' && styles.navBarIconActive]}>💰</Text>
+            <Text style={[styles.navBarText, activeTab === 'money101' && styles.navBarTextActive]}>Money 101</Text>
           </TouchableOpacity>
 
-          {/* Path Peek Tab - KEPT HERE */}
           <TouchableOpacity
-            style={[styles.navBarButton, activeTab === 'pathPeek' && styles.navBarButtonActive]}
+            style={styles.navBarButton}
             onPress={() => setActiveTab('pathPeek')}
           >
-            <Text style={styles.navBarIcon}>🗺️</Text> {/* Using a map/path emoji for now */}
-            <Text style={styles.navBarText}>Path Peek</Text>
+            <Text style={[styles.navBarIcon, activeTab === 'pathPeek' && styles.navBarIconActive]}>🗺️</Text>
+            <Text style={[styles.navBarText, activeTab === 'pathPeek' && styles.navBarTextActive]}>Path Peek</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.navBarButton, activeTab === 'profile' && styles.navBarButtonActive]}
+            style={styles.navBarButton}
             onPress={() => setActiveTab('profile')}
           >
-            <Text style={styles.navBarIcon}>👤</Text>
-            <Text style={styles.navBarText}>Profile</Text>
+            <Text style={[styles.navBarIcon, activeTab === 'profile' && styles.navBarIconActive]}>👤</Text>
+            <Text style={[styles.navBarText, activeTab === 'profile' && styles.navBarTextActive]}>Profile</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -127,14 +124,43 @@ export default function HomeScreen({ navigation }) { // <-- IMPORTANT: Receive n
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f0f4f8',
+    backgroundColor: '#f0f4f8', // Consistent background
   },
   container: {
     flex: 1,
     width: '100%',
   },
-  contentArea: {
-    flex: 1, // Takes up all available space above the nav bar
+  homeContentContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  welcomeBackText: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    marginBottom: 40, // More space below welcome message
+    textAlign: 'center',
+  },
+  button: {
+    backgroundColor: '#3498db',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 10,
+    marginBottom: 15,
+    width: '80%', // Take up most of the width
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  buttonText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '600',
   },
   // Home Tab Specific Styles
   homeContentScroll: {
@@ -163,13 +189,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#3498db',
   },
-  welcomeBackText: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 30,
-    textAlign: 'center',
-  },
   featuredSection: {
     backgroundColor: '#ffffff',
     borderRadius: 10,
@@ -193,7 +212,6 @@ const styles = StyleSheet.create({
     color: '#555',
     lineHeight: 22,
   },
-  // Path Peek button styles (re-added)
   pathPeekButton: {
     backgroundColor: '#2ecc71', // A green color for Path Peek
     paddingVertical: 15,
@@ -229,24 +247,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 5,
+    width: '100%', // Ensure it takes full width
+    position: 'absolute', // Pin to the bottom
+    bottom: 0, // Pin to the bottom
   },
   navBarButton: {
     flex: 1,
     alignItems: 'center',
     paddingVertical: 5,
   },
-  navBarButtonActive: {
-    // Styles for the active tab button
-    // You might add a different background color, bolder text, etc.
-  },
   navBarIcon: {
     fontSize: 24,
     marginBottom: 4,
     color: '#7f8c8d', // Default icon color
   },
+  navBarIconActive: {
+    color: '#3498db', // Active icon color
+  },
   navBarText: {
     fontSize: 12,
     color: '#7f8c8d', // Default text color
   },
-  // Active tab text/icon color will be handled by conditional styling if needed later
+  navBarTextActive: {
+    color: '#3498db', // Active text color
+    fontWeight: 'bold',
+  },
 });
