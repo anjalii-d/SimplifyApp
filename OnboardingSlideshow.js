@@ -1,9 +1,13 @@
 // OnboardingSlideshow.js
-import React, { useState, useRef } from 'react'; // <-- Import useRef
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import Swiper from 'react-native-swiper';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Import AsyncStorage
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebaseConfig'; // Import auth
 
 const { width } = Dimensions.get('window');
+const ONBOARDING_COMPLETED_KEY = '@SimplifyApp:onboardingCompleted'; // Define key here
 
 // Data for the onboarding slides
 const slides = [
@@ -33,28 +37,44 @@ const slides = [
   },
 ];
 
-export default function OnboardingSlideshow({ navigation, onOnboardingComplete }) {
+export default function OnboardingSlideshow({ navigation }) { // Removed onOnboardingComplete prop
   const [currentIndex, setCurrentIndex] = useState(0);
-  const swiperRef = useRef(null); // <-- Create a ref for the Swiper
+  const swiperRef = useRef(null);
 
-  const handleDone = () => {
-    onOnboardingComplete(); // Call the function passed from App.js
-    // App.js will then handle navigation to Home/Login based on auth state
+  const handleDone = async () => {
+    try {
+      await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true'); // Mark onboarding as complete
+
+      // Check auth status and navigate accordingly
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          console.log("Onboarding complete, user logged in, navigating to Home.");
+          navigation.replace('Home'); // Navigate to Home if user is logged in
+        } else {
+          console.log("Onboarding complete, user not logged in, navigating to Login.");
+          navigation.replace('Login'); // Navigate to Login if user is not logged in
+        }
+      });
+    } catch (e) {
+      console.error("Failed to save onboarding status or navigate:", e);
+      // Fallback to Login if there's an error
+      navigation.replace('Login');
+    }
   };
 
   const handleNext = () => {
     if (swiperRef.current) {
-      swiperRef.current.scrollBy(1); // <-- Use the ref to call scrollBy
+      swiperRef.current.scrollBy(1);
     }
   };
 
   return (
     <View style={styles.container}>
       <Swiper
-        ref={swiperRef} // <-- Assign the ref to the Swiper component
+        ref={swiperRef}
         style={styles.wrapper}
         loop={false}
-        showsButtons={false} // We'll use custom buttons
+        showsButtons={false}
         dotStyle={styles.dot}
         activeDotStyle={styles.activeDot}
         onIndexChanged={(index) => setCurrentIndex(index)}
@@ -81,7 +101,7 @@ export default function OnboardingSlideshow({ navigation, onOnboardingComplete }
         {currentIndex < slides.length - 1 ? (
           <TouchableOpacity
             style={styles.nextButton}
-            onPress={handleNext} // <-- Call the new handleNext function
+            onPress={handleNext}
           >
             <Text style={styles.buttonText}>Next →</Text>
           </TouchableOpacity>

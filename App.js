@@ -1,17 +1,17 @@
 // App.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, SafeAreaView } from 'react-native'; // <-- Import SafeAreaView
+import { View, Text, ActivityIndicator, StyleSheet, SafeAreaView } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // Import AsyncStorage
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Import auth and db directly from your firebaseConfig.js
 import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 
 // Import your screens
-import SplashScreen from './SplashScreen'; // New Splash Screen
-import OnboardingSlideshow from './OnboardingSlideshow'; // New Onboarding Slideshow
+import SplashScreen from './SplashScreen';
+import OnboardingSlideshow from './OnboardingSlideshow';
 import LoginScreen from './LoginScreen';
 import HomeScreen from './HomeScreen';
 import AddStoryScreen from './AddStoryScreen';
@@ -19,94 +19,113 @@ import RealityFeedScreen from './RealityFeedScreen';
 import Money101Screen from './Money101Screen';
 import PathPeekScreen from './PathPeekScreen';
 import ProfileScreen from './ProfileScreen';
-import LessonDetailScreen from './LessonDetailScreen'; // <-- NEW: Import LessonDetailScreen
+import LessonDetailScreen from './LessonDetailScreen';
+
 
 const Stack = createStackNavigator();
 const ONBOARDING_COMPLETED_KEY = '@SimplifyApp:onboardingCompleted';
+const HAS_LAUNCHED_BEFORE_KEY = '@SimplifyApp:hasLaunchedBefore'; // NEW: Key for first launch check
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isOnboardingComplete, setIsOnboardingComplete] = useState(false);
-  const [isLoadingOnboarding, setIsLoadingOnboarding] = useState(true); // New state for onboarding check
+  const [hasLaunchedBefore, setHasLaunchedBefore] = useState(null); // null means not checked yet
+  const [isLoadingInitialData, setIsLoadingInitialData] = useState(true); // Combines all loading states
 
   useEffect(() => {
-    const checkOnboardingStatus = async () => {
+    let unsubscribeAuth;
+
+    const checkInitialStatus = async () => {
       try {
-        const value = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
-        if (value !== null && value === 'true') {
-          setIsOnboardingComplete(true);
-        } else {
-          setIsOnboardingComplete(false);
+        // 1. Check if app has launched before
+        const launchedBeforeValue = await AsyncStorage.getItem(HAS_LAUNCHED_BEFORE_KEY);
+        const appHasLaunchedBefore = (launchedBeforeValue === 'true');
+        setHasLaunchedBefore(appHasLaunchedBefore);
+
+        // If it's the very first launch, mark it as launched for next time
+        if (!appHasLaunchedBefore) {
+          await AsyncStorage.setItem(HAS_LAUNCHED_BEFORE_KEY, 'true');
         }
+
+        // 2. Check onboarding status
+        const onboardingValue = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
+        const onboardingIsComplete = (onboardingValue === 'true');
+        setIsOnboardingComplete(onboardingIsComplete);
+
+        // 3. Listen for authentication state changes
+        unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+          setIsLoggedIn(!!user); // Set isLoggedIn based on user presence
+          setIsLoadingInitialData(false); // All initial checks complete
+        });
+
       } catch (e) {
-        console.error("Failed to load onboarding status from AsyncStorage", e);
-        setIsOnboardingComplete(false); // Assume not complete on error
-      } finally {
-        setIsLoadingOnboarding(false); // Onboarding check complete
+        console.error("App.js: Failed to load initial app status:", e);
+        // In case of error, default to assuming it's not the first launch and not logged in
+        setHasLaunchedBefore(true);
+        setIsOnboardingComplete(false);
+        setIsLoggedIn(false);
+        setIsLoadingInitialData(false);
       }
     };
 
-    checkOnboardingStatus();
+    checkInitialStatus();
 
-    // Listen for authentication state changes
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        console.log("User is signed in:", user.uid);
-        setIsLoggedIn(true);
-      } else {
-        console.log("No user signed in. Displaying Login Screen.");
-        setIsLoggedIn(false);
+    return () => {
+      if (unsubscribeAuth) {
+        unsubscribeAuth(); // Clean up auth listener
       }
-      setIsLoadingAuth(false); // Auth check complete
-    });
-
-    return () => unsubscribe();
+    };
   }, []);
 
+  // Handler for when onboarding is explicitly completed from the slideshow
   const handleOnboardingComplete = async () => {
     try {
       await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true');
       setIsOnboardingComplete(true);
+      // No need to navigate here, the onAuthStateChanged listener will handle it
+      // or the next render cycle will pick up the new state.
     } catch (e) {
       console.error("Failed to save onboarding status to AsyncStorage", e);
     }
   };
 
-  // Show a loading screen while checking both auth and onboarding status
-  if (isLoadingAuth || isLoadingOnboarding) {
+  if (isLoadingInitialData || hasLaunchedBefore === null) { // Wait until all checks are done
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3498db" />
-        <Text style={styles.loadingText}>Initializing app...</Text>
+        <Text style={styles.loadingText}>Loading app...</Text>
       </View>
     );
   }
 
+  // Determine the initial route based on the checks
+  let initialRouteName;
+  if (!hasLaunchedBefore) {
+    initialRouteName = 'Splash'; // First ever launch, go to Splash
+  } else if (!isOnboardingComplete) {
+    initialRouteName = 'OnboardingSlideshow'; // Not first launch, but onboarding not done
+  } else if (!isLoggedIn) {
+    initialRouteName = 'Login'; // Onboarding done, but not logged in
+  } else {
+    initialRouteName = 'Home'; // Onboarding done and logged in
+  }
+
   return (
-    <SafeAreaView style={styles.safeArea}> {/* <-- NEW: Wrap with SafeAreaView */}
+    <SafeAreaView style={styles.safeArea}>
       <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          {!isOnboardingComplete ? (
-            <>
-              <Stack.Screen name="Splash" component={SplashScreen} />
-              <Stack.Screen name="OnboardingSlideshow">
-                {props => <OnboardingSlideshow {...props} onOnboardingComplete={handleOnboardingComplete} />}
-              </Stack.Screen>
-            </>
-          ) : isLoggedIn ? (
-            <>
-              <Stack.Screen name="Home" component={HomeScreen} />
-              <Stack.Screen name="AddStory" component={AddStoryScreen} />
-              <Stack.Screen name="RealityFeed" component={RealityFeedScreen} />
-              <Stack.Screen name="Money101" component={Money101Screen} />
-              <Stack.Screen name="PathPeek" component={PathPeekScreen} />
-              <Stack.Screen name="Profile" component={ProfileScreen} />
-              <Stack.Screen name="LessonDetail" component={LessonDetailScreen} />
-            </>
-          ) : (
-            <Stack.Screen name="Login" component={LoginScreen} />
-          )}
+        <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
+          <Stack.Screen name="Splash" component={SplashScreen} />
+          <Stack.Screen name="OnboardingSlideshow">
+            {props => <OnboardingSlideshow {...props} onOnboardingComplete={handleOnboardingComplete} />}
+          </Stack.Screen>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="AddStory" component={AddStoryScreen} />
+          <Stack.Screen name="RealityFeed" component={RealityFeedScreen} />
+          <Stack.Screen name="Money101" component={Money101Screen} />
+          <Stack.Screen name="PathPeek" component={PathPeekScreen} />
+          <Stack.Screen name="Profile" component={ProfileScreen} />
+          <Stack.Screen name="LessonDetail" component={LessonDetailScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaView>
@@ -114,9 +133,9 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { // <-- NEW: Style for SafeAreaView
+  safeArea: {
     flex: 1,
-    backgroundColor: '#f0f4f8', // Match your app's background
+    backgroundColor: '#f0f4f8',
   },
   loadingContainer: {
     flex: 1,

@@ -14,86 +14,9 @@ import {
   Platform
 } from 'react-native';
 import { collection, doc, getDoc } from 'firebase/firestore';
-import { db } from './firebaseConfig'; // Import your Firestore instance
+import { db } from './firebaseConfig'; // Import your Firestore database instance
 
 const { width } = Dimensions.get('window');
-
-// --- Dummy Lesson Data (for testing before Firestore is populated) ---
-// In a real app, this would be fetched from Firestore.
-const dummyLesson = {
-  id: 'lesson1',
-  title: 'Understanding Your First Budget',
-  category: 'Budgeting Basics',
-  content: [
-    "Welcome to your first step towards financial freedom! Budgeting isn't about restricting yourself; it's about giving your money a purpose and making it work for you. Think of it as a roadmap for your cash.",
-    "The core idea of budgeting is to track your income (money coming in) and your expenses (money going out). When you know where your money is going, you can make informed decisions about your spending.",
-    "A popular budgeting method is the 50/30/20 rule. This suggests allocating 50% of your after-tax income to needs (rent, groceries), 30% to wants (entertainment, dining out), and 20% to savings and debt repayment.",
-    "Another simple method is the envelope system. You allocate cash to different spending categories and once an envelope is empty, you stop spending in that category until the next budgeting period. This is great for visual learners.",
-    "Remember, consistency is key! Review your budget regularly, adjust it as your income or expenses change, and don't be afraid to start small. Every little bit of planning helps you reach your financial goals faster.",
-  ],
-  quiz: {
-    questions: [
-      {
-        id: 'q1',
-        type: 'mc',
-        questionText: "What is the primary purpose of budgeting?",
-        options: [
-          "To restrict all spending",
-          "To give your money a purpose and make it work for you",
-          "To avoid paying taxes",
-          "To impress your friends"
-        ],
-        correctAnswer: "To give your money a purpose and make it work for you",
-        relatedContentIndex: 0, // Relates to the first paragraph
-      },
-      {
-        id: 'q2',
-        type: 'tf',
-        questionText: "The 50/30/20 rule suggests 50% for wants.",
-        options: ["True", "False"],
-        correctAnswer: "False", // 50% is for needs
-        relatedContentIndex: 2, // Relates to the 50/30/20 rule paragraph
-      },
-      {
-        id: 'q3',
-        type: 'frq',
-        questionText: "What budgeting method involves allocating cash to different spending categories in physical containers?",
-        correctAnswer: ["envelope system", "envelopes"], // Allow variations
-        relatedContentIndex: 3, // Relates to the envelope system paragraph
-      },
-      {
-        id: 'q4',
-        type: 'mc',
-        questionText: "Which of these is NOT a core idea of budgeting?",
-        options: [
-          "Tracking income",
-          "Tracking expenses",
-          "Knowing where your money is going",
-          "Ignoring your spending habits"
-        ],
-        correctAnswer: "Ignoring your spending habits",
-        relatedContentIndex: 1, // Relates to tracking income/expenses paragraph
-      },
-      {
-        id: 'q5',
-        type: 'tf',
-        questionText: "Consistency is not important when it comes to budgeting.",
-        options: ["True", "False"],
-        correctAnswer: "False",
-        relatedContentIndex: 4, // Relates to consistency paragraph
-      },
-      {
-        id: 'q6',
-        type: 'frq',
-        questionText: "What is the term for money coming into your possession?",
-        correctAnswer: ["income"],
-        relatedContentIndex: 1, // Relates to income/expenses paragraph
-      },
-    ]
-  }
-};
-// --- End Dummy Lesson Data ---
-
 
 export default function LessonDetailScreen({ route, navigation }) {
   const { lessonId } = route.params; // Get the lesson ID passed from Money101Screen
@@ -128,21 +51,27 @@ export default function LessonDetailScreen({ route, navigation }) {
       setLoading(true);
       setError(null);
       try {
-        // For now, using dummy data. Uncomment Firestore fetch when ready.
-        setLesson(dummyLesson);
+        const lessonDocRef = doc(db, 'lessons', lessonId); // Reference to the specific lesson document
+        const lessonDocSnap = await getDoc(lessonDocRef);
 
-        // --- Uncomment this block to fetch from Firestore ---
-        // const lessonDocRef = doc(db, 'lessons', lessonId);
-        // const lessonDocSnap = await getDoc(lessonDocRef);
-        // if (lessonDocSnap.exists()) {
-        //   setLesson({ id: lessonDocSnap.id, ...lessonDocSnap.data() });
-        //   setError(null);
-        // } else {
-        //   setError("Lesson not found.");
-        //   setLesson(null);
-        // }
-        // --- End Firestore fetch block ---
+        if (lessonDocSnap.exists()) {
+          const fetchedData = lessonDocSnap.data();
+          // Ensure content is an array and quiz structure is present
+          if (!Array.isArray(fetchedData.content)) {
+            console.warn("Lesson content is not an array. Please check Firestore data for lesson:", lessonId);
+            fetchedData.content = [fetchedData.content || "No content available."]; // Default to array
+          }
+          if (!fetchedData.quiz || !Array.isArray(fetchedData.quiz.questions)) {
+            console.warn("Lesson quiz or quiz questions are missing/malformed. Please check Firestore data for lesson:", lessonId);
+            fetchedData.quiz = { questions: [] }; // Default to empty quiz
+          }
 
+          setLesson({ id: lessonDocSnap.id, ...fetchedData });
+          setError(null);
+        } else {
+          setError("Lesson not found.");
+          setLesson(null);
+        }
       } catch (err) {
         console.error("Error fetching lesson:", err);
         setError("Failed to load lesson. Please try again.");

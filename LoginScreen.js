@@ -3,13 +3,11 @@ import React, { useState } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 
-// No longer need to destructure onLoginSuccess from route.params
-export default function LoginScreen() {
+export default function LoginScreen({ navigation }) { // <-- Receive navigation prop
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false); // State for loading indicator
 
-  // Get the auth instance (now exported from firebaseConfig.js)
   const auth = getAuth();
 
   const handleLogin = async () => {
@@ -21,8 +19,8 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      console.log("User logged in successfully!!");
-      // The onAuthStateChanged listener in App.js will now handle navigation
+      console.log("User logged in successfully!");
+      // App.js's onAuthStateChanged listener will now handle navigation to Home
     } catch (error) {
       console.error("Login failed:", error.message);
       let errorMessage = "Login failed. Please check your credentials.";
@@ -54,7 +52,7 @@ export default function LoginScreen() {
       await createUserWithEmailAndPassword(auth, email, password);
       console.log("User signed up successfully!");
       Alert.alert("Success!", "Account created! You are now logged in.");
-      // The onAuthStateChanged listener in App.js will now handle navigation
+      // App.js's onAuthStateChanged listener will now handle navigation to Home
     } catch (error) {
       console.error("Sign up failed:", error.message);
       let errorMessage = "Sign up failed. Please try again.";
@@ -71,6 +69,14 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
+      {/* NEW: Back Button */}
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.navigate('Splash')} // Navigate back to the Splash screen
+      >
+        <Text style={styles.backButtonText}>←</Text>
+      </TouchableOpacity>
+
       <Text style={styles.title}>Welcome to $implify!</Text>
       <Text style={styles.subtitle}>Real-world money, simplified.</Text>
 
@@ -82,22 +88,22 @@ export default function LoginScreen() {
         autoCapitalize="none"
         value={email}
         onChangeText={setEmail}
-        editable={!loading} // Disable input when loading
+        editable={!loading}
       />
       <TextInput
         style={styles.input}
         placeholder="Password"
         placeholderTextColor="#999"
-        secureTextEntry // Hides password characters
+        secureTextEntry
         value={password}
         onChangeText={setPassword}
-        editable={!loading} // Disable input when loading
+        editable={!loading}
       />
 
       <TouchableOpacity
         style={[styles.button, loading && styles.buttonDisabled]}
         onPress={handleLogin}
-        disabled={loading} // Disable button when loading
+        disabled={loading}
       >
         {loading ? (
           <ActivityIndicator color="#fff" />
@@ -109,7 +115,7 @@ export default function LoginScreen() {
       <TouchableOpacity
         style={[styles.button, styles.signUpButton, loading && styles.buttonDisabled]}
         onPress={handleSignUp}
-        disabled={loading} // Disable button when loading
+        disabled={loading}
       >
         {loading ? (
           <ActivityIndicator color="#fff" />
@@ -126,8 +132,21 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f0f4f8', // Light background
+    backgroundColor: '#f0f4f8',
     padding: 20,
+  },
+  // NEW: Back Button Styles
+  backButton: {
+    position: 'absolute',
+    top: 40, // Adjust based on SafeAreaView and status bar height
+    left: 20,
+    zIndex: 10,
+    padding: 10,
+  },
+  backButtonText: {
+    fontSize: 24,
+    color: '#34495e', // Darker color for the arrow
+    fontWeight: 'bold',
   },
   title: {
     fontSize: 32,
@@ -139,7 +158,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 18,
     color: '#7f8c8d',
-    marginBottom: 40, // Increased margin for inputs
+    marginBottom: 40,
     textAlign: 'center',
   },
   input: {
@@ -160,7 +179,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   button: {
-    backgroundColor: '#3498db', // A primary blue color
+    backgroundColor: '#3498db',
     paddingVertical: 15,
     paddingHorizontal: 40,
     borderRadius: 10,
@@ -174,10 +193,10 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   signUpButton: {
-    backgroundColor: '#2ecc71', // A different color for sign up
+    backgroundColor: '#2ecc71',
   },
   buttonDisabled: {
-    backgroundColor: '#a0a0a0', // Grey out buttons when loading
+    backgroundColor: '#a0a0a0',
   },
   buttonText: {
     color: '#ffffff',

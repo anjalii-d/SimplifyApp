@@ -1,10 +1,12 @@
 // SplashScreen.js
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 
 export default function SplashScreen({ navigation }) {
   const handlePress = () => {
-    navigation.navigate('OnboardingSlideshow'); // Navigate to the new slideshow screen
+    // This screen is primarily shown on the very first install.
+    // Tapping it always leads to the onboarding slideshow.
+    navigation.replace('OnboardingSlideshow');
   };
 
   return (
@@ -22,9 +24,6 @@ export default function SplashScreen({ navigation }) {
       <TouchableOpacity style={styles.arrowButton} onPress={handlePress}>
         <Text style={styles.arrowText}>→</Text>
       </TouchableOpacity>
-
-      {/* Optional: A subtle loading indicator if needed */}
-      {/* <ActivityIndicator size="small" color="#ffffff" style={styles.activityIndicator} /> */}
     </View>
   );
 }
@@ -75,8 +74,5 @@ const styles = StyleSheet.create({
     fontSize: 30,
     color: '#ffffff',
     fontWeight: 'bold',
-  },
-  activityIndicator: {
-    marginTop: 20,
   },
 });
