@@ -24,12 +24,24 @@ export default function LoginScreen({ navigation }) { // <-- Receive navigation 
     } catch (error) {
       console.error("Login failed:", error.message);
       let errorMessage = "Login failed. Please check your credentials.";
-      if (error.code === 'auth/invalid-email') {
-        errorMessage = "Invalid email address.";
-      } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        errorMessage = "Incorrect email or password.";
-      } else if (error.code === 'auth/too-many-requests') {
-        errorMessage = "Too many login attempts. Please try again later.";
+      switch (error.code) {
+        case 'auth/invalid-email':
+          errorMessage = "The email address is not valid.";
+          break;
+        case 'auth/user-disabled':
+          errorMessage = "This user account has been disabled.";
+          break;
+        case 'auth/user-not-found':
+          errorMessage = "No user found with this email. Please sign up.";
+          break;
+        case 'auth/wrong-password':
+          errorMessage = "Incorrect password. Please try again.";
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = "Too many login attempts. Please try again later.";
+          break;
+        default:
+          errorMessage = `Login failed: ${error.message}`; // Fallback for unexpected errors
       }
       Alert.alert("Login Error", errorMessage);
     } finally {
@@ -56,10 +68,21 @@ export default function LoginScreen({ navigation }) { // <-- Receive navigation 
     } catch (error) {
       console.error("Sign up failed:", error.message);
       let errorMessage = "Sign up failed. Please try again.";
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = "This email is already in use.";
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = "Invalid email address.";
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          errorMessage = "This email is already in use. Please log in or use a different email.";
+          break;
+        case 'auth/invalid-email':
+          errorMessage = "The email address is not valid.";
+          break;
+        case 'auth/operation-not-allowed':
+          errorMessage = "Email/Password sign-up is not enabled. Please contact support."; // This is the error if not enabled
+          break;
+        case 'auth/weak-password':
+          errorMessage = "The password is too weak. Please choose a stronger password.";
+          break;
+        default:
+          errorMessage = `Sign up failed: ${error.message}`; // Fallback for unexpected errors
       }
       Alert.alert("Sign Up Error", errorMessage);
     } finally {

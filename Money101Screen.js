@@ -43,10 +43,10 @@ export default function Money101Screen({ navigation }) { // <-- Receive navigati
         setLessons(groupedLessons);
         setLoading(false);
 
-        // If no category is selected and we have categories, set the first one as default
-        if (Object.keys(groupedLessons).length > 0 && selectedCategory === null) {
-          setSelectedCategory(Object.keys(groupedLessons).sort()[0]);
-        }
+        // REMOVED: Automatic setting of selectedCategory to the first one.
+        // This ensures the categories view is shown by default.
+        // The `selectedCategory` state will remain `null` initially,
+        // causing `renderCategoriesView()` to be displayed.
 
       }, (err) => {
         console.error("Error fetching lessons:", err);
@@ -58,7 +58,8 @@ export default function Money101Screen({ navigation }) { // <-- Receive navigati
     };
 
     fetchLessons();
-  }, [selectedCategory]); // Re-run effect if selectedCategory changes (though not strictly needed for fetch, good for initial selection logic)
+  }, []); // Changed dependency array to empty, as selectedCategory is now user-driven
+
 
   const handleCategoryPress = (category) => {
     setSelectedCategory(category);

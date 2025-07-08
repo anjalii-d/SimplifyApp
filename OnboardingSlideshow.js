@@ -1,92 +1,84 @@
 // OnboardingSlideshow.js
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
-import Swiper from 'react-native-swiper';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // Import AsyncStorage
+// Removed Swiper import
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './firebaseConfig'; // Import auth
+import { auth } from './firebaseConfig';
 
 const { width } = Dimensions.get('window');
-const ONBOARDING_COMPLETED_KEY = '@SimplifyApp:onboardingCompleted'; // Define key here
+const ONBOARDING_COMPLETED_KEY = '@SimplifyApp:onboardingCompleted';
 
-// Data for the onboarding slides
 const slides = [
   {
     title: "Reality Feed: Your Community's Wins & Wisdom",
     description: "Dive into real-life financial journeys shared by people just like you. Discover inspiring successes, learn from common challenges, and connect with a supportive community. It's your daily dose of financial reality, designed to keep you motivated!",
-    icon: "🧾", // Feed icon
-    color: '#3498db', // Blue
+    icon: "🧾",
+    color: '#3498db',
   },
   {
     title: "Money 101: Unlock Your Financial Superpowers",
     description: "Demystify personal finance with bite-sized, easy-to-understand lessons. From budgeting basics to investing essentials, we break down complex topics into simple steps. Empower yourself with knowledge and take control of your financial future!",
-    icon: "📚", // Money 101 icon
-    color: '#2ecc71', // Green
+    icon: "📚",
+    color: '#2ecc71',
   },
   {
     title: "Path Peek: Chart Your Course to Success",
     description: "Explore diverse career paths and understand the financial realities of each. Get insights into earning potential, required skills, and growth opportunities. Plan your future with clarity and confidence, aligning your passions with prosperity!",
-    icon: "🗺️", // Path Peek icon
-    color: '#e67e22', // Orange
+    icon: "🗺️",
+    color: '#e67e22',
   },
   {
     title: "Profile: Track Your Progress, Celebrate Your Journey",
     description: "Your personalized hub to monitor your financial growth, set new goals, and reflect on your achievements. See how far you've come and what's next on your path to financial freedom. This is where your hard work pays off, visually!",
-    icon: "👤", // Profile icon
-    color: '#9b59b6', // Purple
+    icon: "👤",
+    color: '#9b59b6',
   },
 ];
 
-export default function OnboardingSlideshow({ navigation }) { // Removed onOnboardingComplete prop
+export default function OnboardingSlideshow({ navigation, onOnboardingComplete }) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const swiperRef = useRef(null);
 
   const handleDone = async () => {
+    console.log("Onboarding: 'Get Started!' button pressed.");
     try {
-      await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true'); // Mark onboarding as complete
+      await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true');
 
-      // Check auth status and navigate accordingly
       onAuthStateChanged(auth, (user) => {
         if (user) {
           console.log("Onboarding complete, user logged in, navigating to Home.");
-          navigation.replace('Home'); // Navigate to Home if user is logged in
+          navigation.replace('Home');
         } else {
           console.log("Onboarding complete, user not logged in, navigating to Login.");
-          navigation.replace('Login'); // Navigate to Login if user is not logged in
+          navigation.replace('Login');
         }
       });
     } catch (e) {
       console.error("Failed to save onboarding status or navigate:", e);
-      // Fallback to Login if there's an error
       navigation.replace('Login');
     }
   };
 
   const handleNext = () => {
-    if (swiperRef.current) {
-      swiperRef.current.scrollBy(1);
+    console.log("Onboarding: 'Next' button pressed. Current slide:", currentIndex);
+    if (currentIndex < slides.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+      console.log("Moving to next slide:", currentIndex + 1);
+    } else {
+      handleDone(); // If it's the last slide, act as 'Done'
     }
   };
 
+  const currentSlideData = slides[currentIndex];
+
   return (
     <View style={styles.container}>
-      <Swiper
-        ref={swiperRef}
-        style={styles.wrapper}
-        loop={false}
-        showsButtons={false}
-        dotStyle={styles.dot}
-        activeDotStyle={styles.activeDot}
-        onIndexChanged={(index) => setCurrentIndex(index)}
-      >
-        {slides.map((slide, index) => (
-          <View key={index} style={[styles.slide, { backgroundColor: slide.color }]}>
-            <Text style={styles.icon}>{slide.icon}</Text>
-            <Text style={styles.title}>{slide.title}</Text>
-            <Text style={styles.description}>{slide.description}</Text>
-          </View>
-        ))}
-      </Swiper>
+      {/* Manually rendered slide */}
+      <View style={[styles.slide, { backgroundColor: currentSlideData.color }]}>
+        <Text style={styles.icon}>{currentSlideData.icon}</Text>
+        <Text style={styles.title}>{currentSlideData.title}</Text>
+        <Text style={styles.description}>{currentSlideData.description}</Text>
+      </View>
 
       <View style={styles.paginationContainer}>
         {slides.map((_, index) => (
@@ -123,13 +115,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f0f4f8',
   },
-  wrapper: {},
+  // Removed wrapper style as Swiper is gone
   slide: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 30,
-    width: width,
+    width: '100%', // Use 100% width for manual slide
   },
   icon: {
     fontSize: 80,
@@ -157,7 +149,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'absolute',
-    bottom: 80, // Adjust position above buttons
+    bottom: 80,
     width: '100%',
   },
   dot: {
@@ -179,9 +171,10 @@ const styles = StyleSheet.create({
     bottom: 20,
     width: '100%',
     alignItems: 'center',
+    zIndex: 100,
   },
   nextButton: {
-    backgroundColor: '#34495e', // Darker button for navigation
+    backgroundColor: '#FF0000', // TEMPORARY: Red background for debugging
     paddingVertical: 15,
     paddingHorizontal: 40,
     borderRadius: 30,
@@ -192,7 +185,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   doneButton: {
-    backgroundColor: '#2ecc71', // Green for the final "Get Started" button
+    backgroundColor: '#00FF00', // TEMPORARY: Green background for debugging
     paddingVertical: 15,
     paddingHorizontal: 40,
     borderRadius: 30,

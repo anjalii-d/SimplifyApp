@@ -27,10 +27,13 @@ export default function LessonDetailScreen({ route, navigation }) {
 
   const [quizStarted, setQuizStarted] = useState(false);
   const [quizResults, setQuizResults] = useState(null); // null: not taken, object: results
-  const [userAnswers, setUserAnswers] = useState({});
+  const [userAnswers, setUserAnswers] = useState({}); // Stores answers for all questions by question.id
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [scrollToIndex, setScrollToIndex] = useState(null); // State to hold the index to scroll to
   const [tempHighlightedIndex, setTempHighlightedIndex] = useState(null); // State for temporary highlight
+
+  // State for current question's user input (used for TextInput/Radio buttons)
+  const [userAnswer, setUserAnswer] = useState('');
 
   const scrollViewRef = useRef(null);
   // Use a Map for contentRefs for better management with dynamic indices
@@ -67,6 +70,12 @@ export default function LessonDetailScreen({ route, navigation }) {
           }
 
           setLesson({ id: lessonDocSnap.id, ...fetchedData });
+          console.log("DEBUG: Fetched Lesson Data:", { id: lessonDocSnap.id, ...fetchedData }); // DEBUG: Log full lesson data
+          if (fetchedData.quiz && Array.isArray(fetchedData.quiz.questions)) {
+              console.log(`DEBUG: Lesson "${fetchedData.title}" has ${fetchedData.quiz.questions.length} quiz questions.`);
+          } else {
+              console.log("DEBUG: Lesson has no quiz or malformed quiz questions.");
+          }
           setError(null);
         } else {
           setError("Lesson not found.");
@@ -124,17 +133,32 @@ export default function LessonDetailScreen({ route, navigation }) {
     }
   }, [scrollToIndex, quizStarted, quizResults, lesson]); // Dependencies for this effect
 
+  // Effect to update local userAnswer when currentQuestionIndex changes
+  useEffect(() => {
+    if (quizStarted && lesson && lesson.quiz && lesson.quiz.questions[currentQuestionIndex]) {
+      const questionId = lesson.quiz.questions[currentQuestionIndex].id;
+      const savedAnswer = userAnswers[questionId] || '';
+      setUserAnswer(savedAnswer); // Load saved answer for current question
+      console.log(`DEBUG: useEffect - Loaded answer for Q ID ${questionId}: "${savedAnswer}"`); // DEBUG
+    }
+  }, [currentQuestionIndex, quizStarted, lesson, userAnswers]);
+
 
   // --- Quiz Logic ---
   const handleAnswerChange = (questionId, answer) => {
-    setUserAnswers(prev => ({ ...prev, [questionId]: answer }));
+    setUserAnswers(prev => {
+        const newState = { ...prev, [questionId]: answer };
+        console.log(`DEBUG: handleAnswerChange - Q ID: ${questionId}, Answer: "${answer}". New userAnswers[${questionId}]: "${newState[questionId]}". Full userAnswers:`, newState);
+        return newState;
+    });
+    setUserAnswer(answer); // Update local userAnswer state for TextInput/Radio
   };
 
-  const checkQuizAnswer = (question, userAnswer) => {
+  const checkQuizAnswer = (question, userAnswerToCheck) => {
     if (question.type === 'mc' || question.type === 'tf') {
-      return userAnswer === question.correctAnswer;
+      return userAnswerToCheck === question.correctAnswer;
     } else if (question.type === 'frq') {
-      const normalizedUserAnswer = userAnswer ? userAnswer.toLowerCase().trim() : '';
+      const normalizedUserAnswer = userAnswerToCheck ? userAnswerToCheck.toLowerCase().trim() : '';
       // Check if any of the correct answers match (case-insensitive, trimmed)
       return question.correctAnswer.some(correct =>
         normalizedUserAnswer === correct.toLowerCase().trim()
@@ -144,20 +168,21 @@ export default function LessonDetailScreen({ route, navigation }) {
   };
 
   const submitQuiz = () => {
-    if (!lesson || !lesson.quiz) return;
+    if (!lesson || !lesson.quiz || lesson.quiz.questions.length === 0) return;
 
     let correctCount = 0;
     const incorrectQuestions = [];
 
     lesson.quiz.questions.forEach(q => {
-      const isCorrect = checkQuizAnswer(q, userAnswers[q.id]);
+      const userAnswerForQ = userAnswers[q.id];
+      const isCorrect = checkQuizAnswer(q, userAnswerForQ);
       if (isCorrect) {
         correctCount++;
       } else {
         incorrectQuestions.push({
           questionId: q.id,
           relatedContentIndex: q.relatedContentIndex,
-          userAnswer: userAnswers[q.id] || '',
+          userAnswer: userAnswerForQ || '',
           correctAnswer: q.correctAnswer,
           questionText: q.questionText
         });
@@ -169,6 +194,8 @@ export default function LessonDetailScreen({ route, navigation }) {
       total: lesson.quiz.questions.length,
       incorrectQuestions: incorrectQuestions,
     });
+    setQuizStarted(false); // Go to results view
+    console.log("DEBUG: Quiz Submitted. Results:", { score: correctCount, total: lesson.quiz.questions.length, incorrectQuestions: incorrectQuestions });
   };
 
   const resetQuiz = () => {
@@ -178,6 +205,8 @@ export default function LessonDetailScreen({ route, navigation }) {
     setQuizStarted(false);
     setScrollToIndex(null); // Reset scroll index
     setTempHighlightedIndex(null); // Clear temporary highlight
+    // setFeedback(null); // Feedback state is not used in this flow
+    setUserAnswer(''); // Clear current input
     // Scroll to top when quiz is reset
     if (scrollViewRef.current) {
       scrollViewRef.current.scrollTo({ y: 0, animated: true });
@@ -185,9 +214,22 @@ export default function LessonDetailScreen({ route, navigation }) {
   };
 
   const handleNextQuestion = () => {
+    console.log("DEBUG: Next Question button pressed!"); // DEBUG: Log button press
+    console.log(`DEBUG: handleNextQuestion - currentQuestion.id: ${currentQuestion.id}. userAnswer (local state): "${userAnswer}". userAnswers[currentQuestion.id] (global state): "${userAnswers[currentQuestion.id]}"`);
+
+    // Check if an answer has been provided for the current question before moving on
+    // The check should be against the `userAnswers` state, not `userAnswer` local state for robustness
+    if (!userAnswers[currentQuestion.id] || userAnswers[currentQuestion.id].trim() === '') {
+      Alert.alert("Missing Answer", "Please select or type an answer before proceeding.");
+      return;
+    }
+
+    // setFeedback(null); // Feedback state is not used in this flow
     if (currentQuestionIndex < lesson.quiz.questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
+      // This case should ideally be handled by the "Submit Quiz" button
+      // but as a fallback, if somehow "Next" is pressed on the last question, submit.
       submitQuiz();
     }
   };
@@ -195,7 +237,15 @@ export default function LessonDetailScreen({ route, navigation }) {
   const handlePreviousQuestion = () => {
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(prev => prev - 1);
+      // setFeedback(null); // Feedback state is not used in this flow
+      // userAnswer will be loaded by useEffect when currentQuestionIndex changes
     }
+  };
+
+  // Helper to check if all questions have been answered
+  const areAllQuestionsAnswered = () => {
+    if (!lesson || !lesson.quiz || !lesson.quiz.questions) return false;
+    return lesson.quiz.questions.every(q => userAnswers[q.id] !== undefined && userAnswers[q.id] !== null && userAnswers[q.id] !== '');
   };
 
   // Modified scrollToContent function to trigger state change
@@ -237,27 +287,36 @@ export default function LessonDetailScreen({ route, navigation }) {
     );
   }
 
+  const currentQuestion = lesson.quiz?.questions[currentQuestionIndex];
+  const isLastQuestion = currentQuestionIndex === lesson.quiz.questions.length - 1;
+
   // Render a single question
   const renderQuestion = (question) => {
+    console.log(`DEBUG: Rendering Question ${question.id}. Local userAnswer state: "${userAnswer}".`); // DEBUG
+    // console.log(`Question Text: "${question.questionText}"`); // DEBUG: Log just the question text
+
+    // Ensure questionText is a string before rendering
+    const displayQuestionText = typeof question.questionText === 'string'
+      ? question.questionText
+      : 'Question text missing or invalid.';
+
     switch (question.type) {
       case 'mc':
       case 'tf':
         return (
           <View style={styles.questionContainer}>
-            <Text style={styles.questionText}>{question.questionText}</Text>
+            <Text style={styles.questionText}>{currentQuestionIndex + 1}. {displayQuestionText}</Text>
             {question.options.map((option, idx) => (
               <TouchableOpacity
                 key={idx}
                 style={[
                   styles.optionButton,
-                  userAnswers[question.id] === option && styles.selectedOption,
-                  quizResults && checkQuizAnswer(question, option) && styles.correctAnswerHighlight,
-                  quizResults && userAnswers[question.id] === option && !checkQuizAnswer(question, option) && styles.incorrectAnswerHighlight
+                  userAnswer === option && styles.selectedOption, // Use local userAnswer for selection
                 ]}
                 onPress={() => handleAnswerChange(question.id, option)}
-                disabled={!!quizResults} // Disable options after quiz submission
+                pointerEvents="auto" // Ensure clickability
               >
-                <Text style={[styles.optionText, userAnswers[question.id] === option && styles.selectedOptionText]}>{option}</Text>
+                <Text style={[styles.optionText, userAnswer === option && styles.selectedOptionText]}>{option}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -265,22 +324,15 @@ export default function LessonDetailScreen({ route, navigation }) {
       case 'frq':
         return (
           <View style={styles.questionContainer}>
-            <Text style={styles.questionText}>{question.questionText}</Text>
+            <Text style={styles.questionText}>{currentQuestionIndex + 1}. {displayQuestionText}</Text>
             <TextInput
-              style={[
-                styles.frqInput,
-                quizResults && !checkQuizAnswer(question, userAnswers[question.id]) && styles.incorrectAnswerHighlight,
-                quizResults && checkQuizAnswer(question, userAnswers[question.id]) && styles.correctAnswerHighlight
-              ]}
+              style={styles.frqInput}
               placeholder="Type your answer here..."
               placeholderTextColor="#999"
-              value={userAnswers[question.id] || ''}
+              value={userAnswer || ''} // Use local userAnswer state
               onChangeText={(text) => handleAnswerChange(question.id, text)}
-              editable={!quizResults} // Disable input after quiz submission
+              pointerEvents="auto" // Ensure clickability
             />
-            {quizResults && !checkQuizAnswer(question, userAnswers[question.id]) && (
-              <Text style={styles.correctAnswerHint}>Correct: {Array.isArray(question.correctAnswer) ? question.correctAnswer.join(', ') : question.correctAnswer}</Text>
-            )}
           </View>
         );
       default:
@@ -329,26 +381,9 @@ export default function LessonDetailScreen({ route, navigation }) {
         )}
 
         {quizStarted && !quizResults && lesson.quiz && lesson.quiz.questions.length > 0 && (
+          // Quiz Section (now inside ScrollView)
           <View style={styles.quizSection}>
             {renderQuestion(lesson.quiz.questions[currentQuestionIndex])}
-            <View style={styles.quizNavigation}>
-              <TouchableOpacity
-                style={styles.quizNavButton}
-                onPress={handlePreviousQuestion}
-                disabled={currentQuestionIndex === 0}
-              >
-                <Text style={styles.quizNavButtonText}>← Prev</Text>
-              </TouchableOpacity>
-              <Text style={styles.questionCounter}>{currentQuestionIndex + 1} / {lesson.quiz.questions.length}</Text>
-              <TouchableOpacity
-                style={styles.quizNavButton}
-                onPress={handleNextQuestion}
-              >
-                <Text style={styles.quizNavButtonText}>
-                  {currentQuestionIndex === lesson.quiz.questions.length - 1 ? 'Submit Quiz' : 'Next →'}
-                </Text>
-              </TouchableOpacity>
-            </View>
           </View>
         )}
 
@@ -394,6 +429,43 @@ export default function LessonDetailScreen({ route, navigation }) {
           </View>
         )}
       </ScrollView>
+
+      {/* Quiz Navigation (moved outside ScrollView, fixed at bottom) */}
+      {quizStarted && !quizResults && lesson.quiz && lesson.quiz.questions.length > 0 && (
+        <View style={[styles.quizNavigation]} pointerEvents="auto">
+          <TouchableOpacity
+            style={[styles.quizNavButton, styles.quizNavButtonDebug]} // Debug style
+            onPress={handlePreviousQuestion}
+            disabled={currentQuestionIndex === 0}
+            pointerEvents="auto"
+          >
+            <Text style={styles.quizNavButtonText}>← Prev</Text>
+          </TouchableOpacity>
+          <Text style={styles.questionCounter}>{currentQuestionIndex + 1} / {lesson.quiz.questions.length}</Text>
+
+          {isLastQuestion ? (
+            <TouchableOpacity
+              style={[styles.quizNavButton, styles.quizNavButtonDebug]} // Debug style
+              onPress={submitQuiz}
+              disabled={!areAllQuestionsAnswered()} // Disable until all questions are answered
+              pointerEvents="auto"
+            >
+              <Text style={styles.quizNavButtonText}>Submit Quiz</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.quizNavButton, styles.quizNavButtonDebug]} // Debug style
+              onPress={() => {
+                console.log("DEBUG: Next button TouchableOpacity pressed!"); // Direct log
+                handleNextQuestion();
+              }}
+              pointerEvents="auto"
+            >
+              <Text style={styles.quizNavButtonText}>Next →</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -401,7 +473,7 @@ export default function LessonDetailScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   fullScreenContainer: {
     flex: 1,
-    backgroundColor: '#f0f4f8',
+    backgroundColor: '#f0f4f8', // Clean background
   },
   header: {
     flexDirection: 'row',
@@ -417,18 +489,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 3,
-    paddingTop: 0, // <-- MODIFIED: Set to 0 as SafeAreaView handles top padding
+    paddingTop: 0,
   },
   headerTitle: {
     fontSize: 22,
     fontWeight: 'bold',
     color: '#2c3e50',
-    flexShrink: 1, // Allow title to shrink
+    flexShrink: 1,
     textAlign: 'center',
   },
   backButton: {
     paddingRight: 15,
-    paddingVertical: 5, // Make touch target larger
+    paddingVertical: 5,
   },
   backButtonText: {
     fontSize: 24,
@@ -436,7 +508,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   headerRightPlaceholder: {
-    width: 24, // To balance the back button on the left
+    width: 24,
   },
   loadingContainer: {
     flex: 1,
@@ -465,7 +537,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: 20,
-    paddingBottom: 100, // Ensure space for keyboard/buttons
+    paddingBottom: 120, // Increased padding to ensure space for fixed bottom nav
   },
   contentParagraphContainer: {
     backgroundColor: '#ffffff',
@@ -488,9 +560,9 @@ const styles = StyleSheet.create({
     borderColor: '#f1c40f', // Yellow border
     borderWidth: 2,
   },
-  tempHighlightedContent: { // NEW: Style for temporary highlight
-    backgroundColor: '#fff8dc', // Pastel butter yellow
-    borderColor: '#ffd700', // A slightly darker yellow border
+  tempHighlightedContent: {
+    backgroundColor: '#fff8dc',
+    borderColor: '#ffd700',
     borderWidth: 2,
   },
   startQuizButton: {
@@ -513,7 +585,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
-  // Quiz Section Styles
+  // Quiz Section Styles (now within ScrollView)
   quizSection: {
     backgroundColor: '#ffffff',
     borderRadius: 10,
@@ -523,7 +595,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 3,
-    marginBottom: 20,
+    marginBottom: 20, // Space before the end of the scrollable content
   },
   questionContainer: {
     marginBottom: 20,
@@ -564,17 +636,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#34495e',
   },
+  // Quiz Navigation (fixed at bottom of screen)
   quizNavigation: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 20,
+    zIndex: 9999, // Ensure it's on top
+    position: 'absolute', // Pin to the bottom
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#ffffff', // Clean background
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 5,
   },
   quizNavButton: {
     backgroundColor: '#34495e',
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,
+  },
+  quizNavButtonDebug: { // TEMPORARY: Debug background color
+    backgroundColor: 'purple',
   },
   quizNavButtonText: {
     color: '#ffffff',
@@ -692,11 +782,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   correctAnswerHighlight: {
-    backgroundColor: '#d4edda', // Light green
-    borderColor: '#28a745', // Green border
+    backgroundColor: '#d4edda',
+    borderColor: '#28a745',
+    borderWidth: 2,
   },
   incorrectAnswerHighlight: {
-    backgroundColor: '#f8d7da', // Light red
-    borderColor: '#dc3545', // Red border
+    backgroundColor: '#f8d7da',
+    borderColor: '#dc3545',
+    borderWidth: 2,
   },
 });
