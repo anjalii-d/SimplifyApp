@@ -1,7 +1,7 @@
 // OnboardingSlideshow.js
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
-// Removed Swiper import
+import Swiper from 'react-native-swiper'; // Re-imported Swiper
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebaseConfig';
@@ -43,6 +43,10 @@ export default function OnboardingSlideshow({ navigation, onOnboardingComplete }
     console.log("Onboarding: 'Get Started!' button pressed.");
     try {
       await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true');
+      // Call the prop function if it exists
+      if (onOnboardingComplete) {
+        onOnboardingComplete();
+      }
 
       onAuthStateChanged(auth, (user) => {
         if (user) {
@@ -59,41 +63,45 @@ export default function OnboardingSlideshow({ navigation, onOnboardingComplete }
     }
   };
 
-  const handleNext = () => {
-    console.log("Onboarding: 'Next' button pressed. Current slide:", currentIndex);
+  // Swiper automatically handles 'next' when swiped, but we keep this for the button
+  const handleNextButton = () => {
     if (currentIndex < slides.length - 1) {
+      // Swiper's `scrollBy` method can be used if we had a ref to the Swiper component
+      // For simplicity with direct button, we'll let the user swipe or rely on 'Done'
+      // For now, this button will simply advance the internal state, and the Swiper will update.
+      // If you want the button to *control* the swipe, you'd need a ref to Swiper:
+      // swiperRef.current.scrollBy(1);
       setCurrentIndex(currentIndex + 1);
-      console.log("Moving to next slide:", currentIndex + 1);
     } else {
-      handleDone(); // If it's the last slide, act as 'Done'
+      handleDone();
     }
   };
 
-  const currentSlideData = slides[currentIndex];
-
   return (
     <View style={styles.container}>
-      {/* Manually rendered slide */}
-      <View style={[styles.slide, { backgroundColor: currentSlideData.color }]}>
-        <Text style={styles.icon}>{currentSlideData.icon}</Text>
-        <Text style={styles.title}>{currentSlideData.title}</Text>
-        <Text style={styles.description}>{currentSlideData.description}</Text>
-      </View>
-
-      <View style={styles.paginationContainer}>
-        {slides.map((_, index) => (
-          <View
-            key={index}
-            style={[styles.dot, currentIndex === index && styles.activeDot]}
-          />
+      <Swiper
+        style={styles.wrapper}
+        showsButtons={false} // We'll use our own buttons
+        loop={false}
+        paginationStyle={styles.paginationContainer}
+        dotStyle={styles.dot}
+        activeDotStyle={styles.activeDot}
+        onIndexChanged={(index) => setCurrentIndex(index)} // Update current index on swipe
+      >
+        {slides.map((slide, index) => (
+          <View key={index} style={[styles.slide, { backgroundColor: slide.color }]}>
+            <Text style={styles.icon}>{slide.icon}</Text>
+            <Text style={styles.title}>{slide.title}</Text>
+            <Text style={styles.description}>{slide.description}</Text>
+          </View>
         ))}
-      </View>
+      </Swiper>
 
       <View style={styles.navigationButtons}>
         {currentIndex < slides.length - 1 ? (
           <TouchableOpacity
             style={styles.nextButton}
-            onPress={handleNext}
+            onPress={handleNextButton}
           >
             <Text style={styles.buttonText}>Next →</Text>
           </TouchableOpacity>
@@ -115,13 +123,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f0f4f8',
   },
-  // Removed wrapper style as Swiper is gone
+  wrapper: {
+    // Swiper's default wrapper styles
+  },
   slide: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 30,
-    width: '100%', // Use 100% width for manual slide
+    width: '100%',
   },
   icon: {
     fontSize: 80,
@@ -145,12 +155,7 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
   paginationContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'absolute',
-    bottom: 80,
-    width: '100%',
+    bottom: 80, // Position dots above buttons
   },
   dot: {
     backgroundColor: 'rgba(255,255,255,.3)',
@@ -171,10 +176,10 @@ const styles = StyleSheet.create({
     bottom: 20,
     width: '100%',
     alignItems: 'center',
-    zIndex: 100,
+    zIndex: 100, // Ensure buttons are on top
   },
   nextButton: {
-    backgroundColor: '#FF0000', // TEMPORARY: Red background for debugging
+    backgroundColor: '#3498db', // Blue button
     paddingVertical: 15,
     paddingHorizontal: 40,
     borderRadius: 30,
@@ -185,7 +190,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   doneButton: {
-    backgroundColor: '#00FF00', // TEMPORARY: Green background for debugging
+    backgroundColor: '#2ecc71', // Green button
     paddingVertical: 15,
     paddingHorizontal: 40,
     borderRadius: 30,

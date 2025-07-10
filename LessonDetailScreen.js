@@ -70,11 +70,11 @@ export default function LessonDetailScreen({ route, navigation }) {
           }
 
           setLesson({ id: lessonDocSnap.id, ...fetchedData });
-          console.log("DEBUG: Fetched Lesson Data:", { id: lessonDocSnap.id, ...fetchedData }); // DEBUG: Log full lesson data
+          console.log("Fetched Lesson Data:", { id: lessonDocSnap.id, ...fetchedData }); // Log full lesson data
           if (fetchedData.quiz && Array.isArray(fetchedData.quiz.questions)) {
-              console.log(`DEBUG: Lesson "${fetchedData.title}" has ${fetchedData.quiz.questions.length} quiz questions.`);
+              console.log(`Lesson "${fetchedData.title}" has ${fetchedData.quiz.questions.length} quiz questions.`);
           } else {
-              console.log("DEBUG: Lesson has no quiz or malformed quiz questions.");
+              console.log("Lesson has no quiz or malformed quiz questions.");
           }
           setError(null);
         } else {
@@ -139,7 +139,7 @@ export default function LessonDetailScreen({ route, navigation }) {
       const questionId = lesson.quiz.questions[currentQuestionIndex].id;
       const savedAnswer = userAnswers[questionId] || '';
       setUserAnswer(savedAnswer); // Load saved answer for current question
-      console.log(`DEBUG: useEffect - Loaded answer for Q ID ${questionId}: "${savedAnswer}"`); // DEBUG
+      console.log(`useEffect - Loaded answer for Q ID ${questionId}: "${savedAnswer}"`); // DEBUG
     }
   }, [currentQuestionIndex, quizStarted, lesson, userAnswers]);
 
@@ -148,7 +148,7 @@ export default function LessonDetailScreen({ route, navigation }) {
   const handleAnswerChange = (questionId, answer) => {
     setUserAnswers(prev => {
         const newState = { ...prev, [questionId]: answer };
-        console.log(`DEBUG: handleAnswerChange - Q ID: ${questionId}, Answer: "${answer}". New userAnswers[${questionId}]: "${newState[questionId]}". Full userAnswers:`, newState);
+        console.log(`handleAnswerChange - Q ID: ${questionId}, Answer: "${answer}". New userAnswers[${questionId}]: "${newState[questionId]}". Full userAnswers:`, newState);
         return newState;
     });
     setUserAnswer(answer); // Update local userAnswer state for TextInput/Radio
@@ -195,7 +195,7 @@ export default function LessonDetailScreen({ route, navigation }) {
       incorrectQuestions: incorrectQuestions,
     });
     setQuizStarted(false); // Go to results view
-    console.log("DEBUG: Quiz Submitted. Results:", { score: correctCount, total: lesson.quiz.questions.length, incorrectQuestions: incorrectQuestions });
+    console.log("Quiz Submitted. Results:", { score: correctCount, total: lesson.quiz.questions.length, incorrectQuestions: incorrectQuestions });
   };
 
   const resetQuiz = () => {
@@ -205,7 +205,6 @@ export default function LessonDetailScreen({ route, navigation }) {
     setQuizStarted(false);
     setScrollToIndex(null); // Reset scroll index
     setTempHighlightedIndex(null); // Clear temporary highlight
-    // setFeedback(null); // Feedback state is not used in this flow
     setUserAnswer(''); // Clear current input
     // Scroll to top when quiz is reset
     if (scrollViewRef.current) {
@@ -214,8 +213,8 @@ export default function LessonDetailScreen({ route, navigation }) {
   };
 
   const handleNextQuestion = () => {
-    console.log("DEBUG: Next Question button pressed!"); // DEBUG: Log button press
-    console.log(`DEBUG: handleNextQuestion - currentQuestion.id: ${currentQuestion.id}. userAnswer (local state): "${userAnswer}". userAnswers[currentQuestion.id] (global state): "${userAnswers[currentQuestion.id]}"`);
+    console.log("Next Question button pressed!"); // Log button press
+    console.log(`handleNextQuestion - currentQuestion.id: ${currentQuestion.id}. userAnswer (local state): "${userAnswer}". userAnswers[currentQuestion.id] (global state): "${userAnswers[currentQuestion.id]}"`);
 
     // Check if an answer has been provided for the current question before moving on
     // The check should be against the `userAnswers` state, not `userAnswer` local state for robustness
@@ -224,12 +223,11 @@ export default function LessonDetailScreen({ route, navigation }) {
       return;
     }
 
-    // setFeedback(null); // Feedback state is not used in this flow
     if (currentQuestionIndex < lesson.quiz.questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
-      // This case should ideally be handled by the "Submit Quiz" button
-      // but as a fallback, if somehow "Next" is pressed on the last question, submit.
+      // If "Next" is pressed on the last question, it should be the "Submit Quiz" button
+      // This case should ideally not be reached if the button correctly changes to "Submit Quiz"
       submitQuiz();
     }
   };
@@ -237,7 +235,6 @@ export default function LessonDetailScreen({ route, navigation }) {
   const handlePreviousQuestion = () => {
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(prev => prev - 1);
-      // setFeedback(null); // Feedback state is not used in this flow
       // userAnswer will be loaded by useEffect when currentQuestionIndex changes
     }
   };
@@ -245,8 +242,11 @@ export default function LessonDetailScreen({ route, navigation }) {
   // Helper to check if all questions have been answered
   const areAllQuestionsAnswered = () => {
     if (!lesson || !lesson.quiz || !lesson.quiz.questions) return false;
-    return lesson.quiz.questions.every(q => userAnswers[q.id] !== undefined && userAnswers[q.id] !== null && userAnswers[q.id] !== '');
+    const allAnswered = lesson.quiz.questions.every(q => userAnswers[q.id] !== undefined && userAnswers[q.id] !== null && userAnswers[q.id] !== '');
+    console.log(`areAllQuestionsAnswered() returns: ${allAnswered}. Current userAnswers:`, userAnswers);
+    return allAnswered;
   };
+
 
   // Modified scrollToContent function to trigger state change
   const scrollToContent = (index) => {
@@ -292,8 +292,7 @@ export default function LessonDetailScreen({ route, navigation }) {
 
   // Render a single question
   const renderQuestion = (question) => {
-    console.log(`DEBUG: Rendering Question ${question.id}. Local userAnswer state: "${userAnswer}".`); // DEBUG
-    // console.log(`Question Text: "${question.questionText}"`); // DEBUG: Log just the question text
+    console.log(`Rendering Question ${question.id}. Local userAnswer state: "${userAnswer}".`); // Log
 
     // Ensure questionText is a string before rendering
     const displayQuestionText = typeof question.questionText === 'string'
@@ -340,8 +339,12 @@ export default function LessonDetailScreen({ route, navigation }) {
     }
   };
 
+  const submitButtonDisabled = !areAllQuestionsAnswered();
+  console.log(`Submit button disabled state: ${submitButtonDisabled}`);
+
+
   return (
-    <KeyboardAvoidingView
+    <KeyboardAvoidingView // Re-introduced KeyboardAvoidingView
       style={styles.fullScreenContainer}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
@@ -432,9 +435,9 @@ export default function LessonDetailScreen({ route, navigation }) {
 
       {/* Quiz Navigation (moved outside ScrollView, fixed at bottom) */}
       {quizStarted && !quizResults && lesson.quiz && lesson.quiz.questions.length > 0 && (
-        <View style={[styles.quizNavigation]} pointerEvents="auto">
+        <View style={styles.quizNavigation} pointerEvents="auto">
           <TouchableOpacity
-            style={[styles.quizNavButton, styles.quizNavButtonDebug]} // Debug style
+            style={styles.quizNavButton}
             onPress={handlePreviousQuestion}
             disabled={currentQuestionIndex === 0}
             pointerEvents="auto"
@@ -445,20 +448,17 @@ export default function LessonDetailScreen({ route, navigation }) {
 
           {isLastQuestion ? (
             <TouchableOpacity
-              style={[styles.quizNavButton, styles.quizNavButtonDebug]} // Debug style
+              style={[styles.quizNavButton, submitButtonDisabled && styles.quizNavButtonDisabled]}
               onPress={submitQuiz}
-              disabled={!areAllQuestionsAnswered()} // Disable until all questions are answered
+              disabled={submitButtonDisabled}
               pointerEvents="auto"
             >
               <Text style={styles.quizNavButtonText}>Submit Quiz</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              style={[styles.quizNavButton, styles.quizNavButtonDebug]} // Debug style
-              onPress={() => {
-                console.log("DEBUG: Next button TouchableOpacity pressed!"); // Direct log
-                handleNextQuestion();
-              }}
+              style={styles.quizNavButton}
+              onPress={handleNextQuestion}
               pointerEvents="auto"
             >
               <Text style={styles.quizNavButtonText}>Next →</Text>
@@ -474,6 +474,7 @@ const styles = StyleSheet.create({
   fullScreenContainer: {
     flex: 1,
     backgroundColor: '#f0f4f8', // Clean background
+    overflow: 'visible',
   },
   header: {
     flexDirection: 'row',
@@ -658,13 +659,13 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   quizNavButton: {
-    backgroundColor: '#34495e',
+    backgroundColor: '#3498db', // Blue for navigation buttons
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,
   },
-  quizNavButtonDebug: { // TEMPORARY: Debug background color
-    backgroundColor: 'purple',
+  quizNavButtonDisabled: {
+    backgroundColor: '#a0cbe0', // Lighter blue when disabled
   },
   quizNavButtonText: {
     color: '#ffffff',
