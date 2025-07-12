@@ -13,8 +13,11 @@ import {
   KeyboardAvoidingView,
   Platform
 } from 'react-native';
-import { collection, doc, getDoc } from 'firebase/firestore';
-import { db } from './firebaseConfig'; // Import your Firestore database instance
+// Removed Firestore imports for lesson content: import { collection, doc, getDoc } from 'firebase/firestore';
+// Removed db import as it's no longer used for lesson content, but keep if used elsewhere (e.g., auth)
+// import { db } from './firebaseConfig'; // Keep or remove based on other app needs
+
+import lessonsData from './lessonsData'; // Import the hardcoded lessons data
 
 const { width } = Dimensions.get('window');
 
@@ -44,45 +47,43 @@ export default function LessonDetailScreen({ route, navigation }) {
     if (element) {
       contentRefs.current.set(index, element);
     } else {
-      contentRefs.current.delete(index);
+      contentRefs.current.delete(index); // Correctly delete if element is null
     }
   }, []);
 
-  // Fetch lesson data from Firestore
+  // Load lesson data from hardcoded data
   useEffect(() => {
-    const fetchLesson = async () => {
+    const loadLesson = () => {
       setLoading(true);
       setError(null);
       try {
-        const lessonDocRef = doc(db, 'lessons', lessonId); // Reference to the specific lesson document
-        const lessonDocSnap = await getDoc(lessonDocRef);
+        const fetchedData = lessonsData.find(l => l.id === lessonId); // Find lesson by ID
 
-        if (lessonDocSnap.exists()) {
-          const fetchedData = lessonDocSnap.data();
-          // Ensure content is an array and quiz structure is present
+        if (fetchedData) {
+          // Validate structure for hardcoded data
           if (!Array.isArray(fetchedData.content)) {
-            console.warn("Lesson content is not an array. Please check Firestore data for lesson:", lessonId);
-            fetchedData.content = [fetchedData.content || "No content available."]; // Default to array
+            console.warn("Hardcoded lesson content is not an array. Please check data for lesson:", lessonId);
+            fetchedData.content = [fetchedData.content || "No content available."];
           }
           if (!fetchedData.quiz || !Array.isArray(fetchedData.quiz.questions)) {
-            console.warn("Lesson quiz or quiz questions are missing/malformed. Please check Firestore data for lesson:", lessonId);
-            fetchedData.quiz = { questions: [] }; // Default to empty quiz
+            console.warn("Hardcoded lesson quiz or quiz questions are missing/malformed. Please check data for lesson:", lessonId);
+            fetchedData.quiz = { questions: [] };
           }
 
-          setLesson({ id: lessonDocSnap.id, ...fetchedData });
-          console.log("Fetched Lesson Data:", { id: lessonDocSnap.id, ...fetchedData }); // Log full lesson data
+          setLesson({ id: lessonId, ...fetchedData });
+          console.log("Loaded Hardcoded Lesson Data:", { id: lessonId, ...fetchedData });
           if (fetchedData.quiz && Array.isArray(fetchedData.quiz.questions)) {
-              console.log(`Lesson "${fetchedData.title}" has ${fetchedData.quiz.questions.length} quiz questions.`);
+              console.log(`Hardcoded Lesson "${fetchedData.title}" has ${fetchedData.quiz.questions.length} quiz questions.`);
           } else {
-              console.log("Lesson has no quiz or malformed quiz questions.");
+              console.log("Hardcoded Lesson has no quiz or malformed quiz questions.");
           }
           setError(null);
         } else {
-          setError("Lesson not found.");
+          setError("Lesson not found in hardcoded data. Check lessonId.");
           setLesson(null);
         }
       } catch (err) {
-        console.error("Error fetching lesson:", err);
+        console.error("Error loading hardcoded lesson:", err);
         setError("Failed to load lesson. Please try again.");
         setLesson(null);
       } finally {
@@ -90,65 +91,14 @@ export default function LessonDetailScreen({ route, navigation }) {
       }
     };
 
-    fetchLesson();
-  }, [lessonId]); // Re-fetch if lessonId changes
-
-  // Effect to handle scrolling once the content is rendered and scrollToIndex is set
-  useEffect(() => {
-    if (scrollToIndex !== null && !quizStarted && !quizResults && lesson) {
-      const targetRef = contentRefs.current.get(scrollToIndex);
-      if (scrollViewRef.current && targetRef) {
-        // Give React Native a moment to render and measure the content
-        setTimeout(() => {
-          if (targetRef) { // Re-check if targetRef still exists after timeout
-            targetRef.measureLayout(
-              scrollViewRef.current,
-              (x, y, width, height) => {
-                console.log(`MeasureLayout for index ${scrollToIndex}: x=${x}, y=${y}, width=${width}, height=${height}`);
-                if (y !== undefined && y !== null) {
-                  scrollViewRef.current.scrollTo({ y: y, animated: true });
-                  setTempHighlightedIndex(scrollToIndex); // Set temporary highlight
-                  console.log(`Highlighting index: ${scrollToIndex}`); // Debug log
-                  setTimeout(() => {
-                    setTempHighlightedIndex(null); // Clear highlight after 3 seconds
-                    console.log(`Clearing highlight for index: ${scrollToIndex}`); // Debug log
-                  }, 3000);
-                  setScrollToIndex(null); // Reset scrollToIndex after scrolling
-                } else {
-                  console.warn(`Failed to get valid Y coordinate for content index: ${scrollToIndex}`);
-                }
-              },
-              (error) => {
-                console.error("MeasureLayout error:", error);
-                console.warn("Failed to measure layout for content index:", scrollToIndex);
-              }
-            );
-          } else {
-            console.warn(`Cannot scroll to content index ${scrollToIndex} after timeout: targetRef is null.`);
-          }
-        }, 250); // Increased delay to 250ms for even more stability
-      } else {
-        console.warn(`Cannot scroll to content index ${scrollToIndex}: scrollViewRef or targetRef is null (useEffect initial check).`);
-      }
-    }
-  }, [scrollToIndex, quizStarted, quizResults, lesson]); // Dependencies for this effect
-
-  // Effect to update local userAnswer when currentQuestionIndex changes
-  useEffect(() => {
-    if (quizStarted && lesson && lesson.quiz && lesson.quiz.questions[currentQuestionIndex]) {
-      const questionId = lesson.quiz.questions[currentQuestionIndex].id;
-      const savedAnswer = userAnswers[questionId] || '';
-      setUserAnswer(savedAnswer); // Load saved answer for current question
-      console.log(`useEffect - Loaded answer for Q ID ${questionId}: "${savedAnswer}"`); // DEBUG
-    }
-  }, [currentQuestionIndex, quizStarted, lesson, userAnswers]);
-
+    loadLesson();
+  }, [lessonId]); // Re-load if lessonId changes
 
   // --- Quiz Logic ---
   const handleAnswerChange = (questionId, answer) => {
     setUserAnswers(prev => {
         const newState = { ...prev, [questionId]: answer };
-        console.log(`handleAnswerChange - Q ID: ${questionId}, Answer: "${answer}". New userAnswers[${questionId}]: "${newState[questionId]}". Full userAnswers:`, newState);
+        console.log(`[QUIZ DEBUG] handleAnswerChange - Q ID: ${questionId}, Answer: "${answer}". Full userAnswers:`, newState);
         return newState;
     });
     setUserAnswer(answer); // Update local userAnswer state for TextInput/Radio
@@ -159,8 +109,7 @@ export default function LessonDetailScreen({ route, navigation }) {
       return userAnswerToCheck === question.correctAnswer;
     } else if (question.type === 'frq') {
       const normalizedUserAnswer = userAnswerToCheck ? userAnswerToCheck.toLowerCase().trim() : '';
-      // Check if any of the correct answers match (case-insensitive, trimmed)
-      return question.correctAnswer.some(correct =>
+      return Array.isArray(question.correctAnswer) && question.correctAnswer.some(correct =>
         normalizedUserAnswer === correct.toLowerCase().trim()
       );
     }
@@ -168,7 +117,11 @@ export default function LessonDetailScreen({ route, navigation }) {
   };
 
   const submitQuiz = () => {
-    if (!lesson || !lesson.quiz || lesson.quiz.questions.length === 0) return;
+    console.log("[QUIZ DEBUG] submitQuiz called.");
+    if (!lesson || !lesson.quiz || lesson.quiz.questions.length === 0) {
+        console.warn("[QUIZ DEBUG] submitQuiz: Lesson or quiz data missing/empty.");
+        return;
+    }
 
     let correctCount = 0;
     const incorrectQuestions = [];
@@ -176,6 +129,9 @@ export default function LessonDetailScreen({ route, navigation }) {
     lesson.quiz.questions.forEach(q => {
       const userAnswerForQ = userAnswers[q.id];
       const isCorrect = checkQuizAnswer(q, userAnswerForQ);
+
+      console.log(`[QUIZ DEBUG] Checking Q ID: ${q.id}, User Answer: "${userAnswerForQ}", Correct Answer in Data:`, q.correctAnswer);
+
       if (isCorrect) {
         correctCount++;
       } else {
@@ -183,7 +139,7 @@ export default function LessonDetailScreen({ route, navigation }) {
           questionId: q.id,
           relatedContentIndex: q.relatedContentIndex,
           userAnswer: userAnswerForQ || '',
-          correctAnswer: q.correctAnswer,
+          correctAnswer: q.correctAnswer, // This is where the correct answer from the hardcoded data is pulled
           questionText: q.questionText
         });
       }
@@ -195,10 +151,11 @@ export default function LessonDetailScreen({ route, navigation }) {
       incorrectQuestions: incorrectQuestions,
     });
     setQuizStarted(false); // Go to results view
-    console.log("Quiz Submitted. Results:", { score: correctCount, total: lesson.quiz.questions.length, incorrectQuestions: incorrectQuestions });
+    console.log("[QUIZ DEBUG] Quiz Submitted. Results:", { score: correctCount, total: lesson.quiz.questions.length, incorrectQuestions: incorrectQuestions });
   };
 
   const resetQuiz = () => {
+    console.log("[QUIZ DEBUG] resetQuiz called.");
     setUserAnswers({});
     setQuizResults(null);
     setCurrentQuestionIndex(0);
@@ -213,37 +170,44 @@ export default function LessonDetailScreen({ route, navigation }) {
   };
 
   const handleNextQuestion = () => {
-    console.log("Next Question button pressed!"); // Log button press
-    console.log(`handleNextQuestion - currentQuestion.id: ${currentQuestion.id}. userAnswer (local state): "${userAnswer}". userAnswers[currentQuestion.id] (global state): "${userAnswers[currentQuestion.id]}"`);
+    console.log("[QUIZ DEBUG] Next Question button pressed!");
+    console.log(`[QUIZ DEBUG] handleNextQuestion - currentQuestionIndex: ${currentQuestionIndex}, total questions: ${lesson.quiz.questions.length}`);
+    console.log(`[QUIZ DEBUG] handleNextQuestion - currentQuestion.id: ${currentQuestion.id}. userAnswer (local state): "${userAnswer}". userAnswers[currentQuestion.id] (global state): "${userAnswers[currentQuestion.id]}"`);
 
     // Check if an answer has been provided for the current question before moving on
-    // The check should be against the `userAnswers` state, not `userAnswer` local state for robustness
     if (!userAnswers[currentQuestion.id] || userAnswers[currentQuestion.id].trim() === '') {
       Alert.alert("Missing Answer", "Please select or type an answer before proceeding.");
+      console.log("[QUIZ DEBUG] Alert: Missing Answer triggered.");
       return;
     }
 
     if (currentQuestionIndex < lesson.quiz.questions.length - 1) {
+      console.log(`[QUIZ DEBUG] Advancing to next question: ${currentQuestionIndex + 1}`);
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
-      // If "Next" is pressed on the last question, it should be the "Submit Quiz" button
-      // This case should ideally not be reached if the button correctly changes to "Submit Quiz"
+      console.log("[QUIZ DEBUG] handleNextQuestion: Reached end of questions, calling submitQuiz (fallback).");
       submitQuiz();
     }
   };
 
   const handlePreviousQuestion = () => {
+    console.log("[QUIZ DEBUG] Previous Question button pressed!");
     if (currentQuestionIndex > 0) {
+      console.log(`[QUIZ DEBUG] Going back to previous question: ${currentQuestionIndex - 1}`);
       setCurrentQuestionIndex(prev => prev - 1);
-      // userAnswer will be loaded by useEffect when currentQuestionIndex changes
+    } else {
+        console.log("[QUIZ DEBUG] Already on first question, cannot go back.");
     }
   };
 
   // Helper to check if all questions have been answered
   const areAllQuestionsAnswered = () => {
-    if (!lesson || !lesson.quiz || !lesson.quiz.questions) return false;
+    if (!lesson || !lesson.quiz || !lesson.quiz.questions) {
+        console.log("[QUIZ DEBUG] areAllQuestionsAnswered: Lesson or quiz data missing, returning false.");
+        return false;
+    }
     const allAnswered = lesson.quiz.questions.every(q => userAnswers[q.id] !== undefined && userAnswers[q.id] !== null && userAnswers[q.id] !== '');
-    console.log(`areAllQuestionsAnswered() returns: ${allAnswered}. Current userAnswers:`, userAnswers);
+    console.log(`[QUIZ DEBUG] areAllQuestionsAnswered() returns: ${allAnswered}. Current userAnswers:`, userAnswers);
     return allAnswered;
   };
 
@@ -292,7 +256,7 @@ export default function LessonDetailScreen({ route, navigation }) {
 
   // Render a single question
   const renderQuestion = (question) => {
-    console.log(`Rendering Question ${question.id}. Local userAnswer state: "${userAnswer}".`); // Log
+    console.log(`[QUIZ DEBUG] Rendering Question ${question.id}. Current Index: ${currentQuestionIndex}. Local userAnswer state: "${userAnswer}".`);
 
     // Ensure questionText is a string before rendering
     const displayQuestionText = typeof question.questionText === 'string'
@@ -339,12 +303,12 @@ export default function LessonDetailScreen({ route, navigation }) {
     }
   };
 
-  const submitButtonDisabled = !areAllQuestionsAnswered();
-  console.log(`Submit button disabled state: ${submitButtonDisabled}`);
+  const submitButtonDisabled = !isLastQuestion || !areAllQuestionsAnswered(); // Submit only on last question AND all answered
+  console.log(`[QUIZ DEBUG] Submit button disabled state: ${submitButtonDisabled}. (isLastQuestion: ${isLastQuestion}, areAllQuestionsAnswered: ${areAllQuestionsAnswered()})`);
 
 
   return (
-    <KeyboardAvoidingView // Re-introduced KeyboardAvoidingView
+    <KeyboardAvoidingView
       style={styles.fullScreenContainer}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
@@ -377,7 +341,12 @@ export default function LessonDetailScreen({ route, navigation }) {
                 <Text style={styles.contentParagraph}>{paragraph}</Text>
               </View>
             ))}
-            <TouchableOpacity style={styles.startQuizButton} onPress={() => setQuizStarted(true)}>
+            <TouchableOpacity style={styles.startQuizButton} onPress={() => {
+                setQuizStarted(true);
+                setCurrentQuestionIndex(0); // Ensure starting from first question
+                setUserAnswers({}); // Clear any previous answers
+                setUserAnswer(''); // Clear current input
+            }}>
               <Text style={styles.startQuizButtonText}>Start Quiz!</Text>
             </TouchableOpacity>
           </>
@@ -459,6 +428,7 @@ export default function LessonDetailScreen({ route, navigation }) {
             <TouchableOpacity
               style={styles.quizNavButton}
               onPress={handleNextQuestion}
+              disabled={userAnswer === ''} // Disable next until current question is answered
               pointerEvents="auto"
             >
               <Text style={styles.quizNavButtonText}>Next →</Text>
@@ -545,6 +515,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 15,
     marginBottom: 15,
+    borderColor: '#e0e0e0', // Default border
+    borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,

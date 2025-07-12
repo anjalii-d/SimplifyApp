@@ -1,156 +1,74 @@
 // Money101Screen.js
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { db } from './firebaseConfig'; // Import your Firestore database instance
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  RefreshControl,
+} from 'react-native';
+// Removed Firestore imports for lessons: import { collection, getDocs } from 'firebase/firestore';
+// Removed db import as it's no longer used for lesson content, but keep if used elsewhere (e.g., auth)
+// import { db } from './firebaseConfig';
+// Removed useFocusEffect as data is now hardcoded and doesn't need to be fetched
+// import { useFocusEffect } from '@react-navigation/native';
 
-export default function Money101Screen({ navigation }) { // <-- Receive navigation prop
-  const [lessons, setLessons] = useState({}); // Stores lessons grouped by category
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState(null); // State for selected category
+import lessonsData from './lessonsData'; // Import the hardcoded lessons data
 
+export default function Money101Screen({ navigation }) {
+  const [lessons, setLessons] = useState([]); // Will now store sorted hardcoded lessons
+  const [loading, setLoading] = useState(true); // Still use loading state for initial processing
+  const [error, setError] = useState(null); // Keep error state for potential data issues
+  const [refreshing, setRefreshing] = useState(false); // Can keep for visual refresh, but won't fetch
+
+  // Process hardcoded lessons on component mount
   useEffect(() => {
-    const fetchLessons = () => {
-      // Query all lessons, ordered by category and then by the 'order' field within each category
-      const q = query(collection(db, 'lessons'), orderBy('category'), orderBy('order'));
+    try {
+      // Group lessons by category and sort them
+      const groupedLessons = lessonsData.reduce((acc, lesson) => {
+        const category = lesson.category || 'Uncategorized';
+        if (!acc[category]) {
+          acc[category] = [];
+        }
+        acc[category].push(lesson);
+        return acc;
+      }, {});
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const fetchedLessons = [];
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          fetchedLessons.push({
-            id: doc.id,
-            title: data.title,
-            content: data.content, // Ensure content is an array of strings for LessonDetailScreen
-            category: data.category,
-            order: data.order,
-            time: data.time || '5 min read', // Placeholder for 'time' as per wireframe
-            progress: data.progress || '0%', // Placeholder for 'progress'
-          });
-        });
+      // Sort categories alphabetically
+      const sortedCategories = Object.keys(groupedLessons).sort();
 
-        // Group lessons by category
-        const groupedLessons = fetchedLessons.reduce((acc, lesson) => {
-          const category = lesson.category || 'Uncategorized'; // Default if category is missing
-          if (!acc[category]) {
-            acc[category] = [];
-          }
-          acc[category].push(lesson);
-          return acc;
-        }, {});
-
-        setLessons(groupedLessons);
-        setLoading(false);
-
-        // REMOVED: Automatic setting of selectedCategory to the first one.
-        // This ensures the categories view is shown by default.
-        // The `selectedCategory` state will remain `null` initially,
-        // causing `renderCategoriesView()` to be displayed.
-
-      }, (err) => {
-        console.error("Error fetching lessons:", err);
-        setError("Failed to load lessons. Please try again.");
-        setLoading(false);
+      // Create a flat array of lessons, sorted by category and then by order
+      const processedLessons = [];
+      sortedCategories.forEach(category => {
+        groupedLessons[category].sort((a, b) => a.order - b.order);
+        processedLessons.push(...groupedLessons[category]);
       });
 
-      return () => unsubscribe();
-    };
+      setLessons(processedLessons);
+      setLoading(false);
+      console.log("Loaded all hardcoded lessons:", processedLessons.length);
+    } catch (err) {
+      console.error("Error processing hardcoded lessons:", err);
+      setError("Failed to load lessons from internal data.");
+      setLoading(false);
+    }
+  }, []); // Empty dependency array means this runs once on mount
 
-    fetchLessons();
-  }, []); // Changed dependency array to empty, as selectedCategory is now user-driven
-
-
-  const handleCategoryPress = (category) => {
-    setSelectedCategory(category);
-    // No need to change currentView state here, as we're using navigation for detail
-  };
-
-  const handleLessonPress = (lessonId) => { // Now accepts lessonId directly
-    // Navigate to the LessonDetailScreen, passing the lesson's ID
-    navigation.navigate('LessonDetail', { lessonId: lessonId });
-  };
-
-  const renderCategoriesView = () => {
-    const categories = Object.keys(lessons).sort();
-    return (
-      <View style={styles.contentWrapper}>
-        {/* Header for Category View */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Money 101</Text>
-          <View style={styles.headerIconPlaceholder}>
-            <Text style={styles.headerIconText}>?</Text>
-          </View>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.categoryGrid}>
-          {categories.length > 0 ? (
-            categories.map((category) => (
-              <TouchableOpacity
-                key={category}
-                style={styles.categoryCard}
-                onPress={() => handleCategoryPress(category)}
-              >
-                <Text style={styles.categoryCardText}>{category}</Text>
-              </TouchableOpacity>
-            ))
-          ) : (
-            <Text style={styles.noContentText}>No categories found.</Text>
-          )}
-        </ScrollView>
-        {/* Home icon at the bottom */}
-        <View style={styles.homeIconPlaceholder}>
-          <Text style={{ fontSize: 24 }}>🏠</Text>
-        </View>
-      </View>
-    );
-  };
-
-  const renderLessonsForCategoryView = () => {
-    const lessonsInCategory = lessons[selectedCategory] || [];
-    return (
-      <View style={styles.contentWrapper}>
-        {/* Header for Lessons List View */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => setSelectedCategory(null)} style={styles.backButton}> {/* Go back to categories */}
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{selectedCategory}</Text>
-          <View style={styles.headerIconPlaceholder}>
-            <Text style={styles.headerIconText}>?</Text>
-          </View>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.lessonsList}>
-          {lessonsInCategory.length > 0 ? (
-            lessonsInCategory.map((lesson) => (
-              <TouchableOpacity
-                key={lesson.id}
-                style={styles.lessonListItem}
-                onPress={() => handleLessonPress(lesson.id)} // Pass lesson.id
-              >
-                <Text style={styles.lessonListItemTitle}>{lesson.title}</Text>
-                {/* Display a snippet of content, assuming it's a string for this view */}
-                <Text style={styles.lessonListItemDesc}>{Array.isArray(lesson.content) ? lesson.content[0].substring(0, 70) + '...' : lesson.content.substring(0, 70) + '...'}</Text>
-              </TouchableOpacity>
-            ))
-          ) : (
-            <Text style={styles.noContentText}>No lessons in this category yet.</Text>
-          )}
-        </ScrollView>
-        {/* Home icon at the bottom */}
-        <View style={styles.homeIconPlaceholder}>
-          <Text style={{ fontSize: 24 }}>🏠</Text>
-        </View>
-      </View>
-    );
-  };
+  // onRefresh will just simulate loading, no actual data fetch
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // Simulate a network request or data processing
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    setRefreshing(false);
+  }, []);
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4CAF50" />
-        <Text style={styles.loadingText}>Loading financial wisdom...</Text>
+        <ActivityIndicator size="large" color="#3498db" />
+        <Text style={styles.loadingText}>Loading lessons...</Text>
       </View>
     );
   }
@@ -159,14 +77,68 @@ export default function Money101Screen({ navigation }) { // <-- Receive navigati
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>{error}</Text>
+        {/* No actual fetchLessons, just a visual retry */}
+        <TouchableOpacity style={styles.retryButton} onPress={() => setLoading(true)}>
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
-  // Render either categories or lessons for a selected category
+  // Group lessons by category for display
+  const groupedLessonsForDisplay = lessons.reduce((acc, lesson) => {
+    const category = lesson.category || 'Uncategorized';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(lesson);
+    return acc;
+  }, {});
+
+  const categories = Object.keys(groupedLessonsForDisplay).sort();
+
   return (
     <View style={styles.container}>
-      {selectedCategory === null ? renderCategoriesView() : renderLessonsForCategoryView()}
+      <Text style={styles.headerTitle}>Money 101: Financial Literacy</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {categories.length > 0 ? (
+          categories.map((category) => (
+            <View key={category} style={styles.categorySection}>
+              <Text style={styles.categoryHeader}>{category}</Text>
+              {groupedLessonsForDisplay[category].map((lesson) => (
+                <TouchableOpacity
+                  key={lesson.id}
+                  style={styles.lessonCard}
+                  onPress={() => {
+                    // Navigate to LessonDetailScreen, passing the lesson's ID
+                    console.log(`Navigating to lesson: ${lesson.id}`);
+                    navigation.navigate('LessonDetail', { lessonId: lesson.id });
+                  }}
+                >
+                  <Text style={styles.lessonTitle}>{lesson.title}</Text>
+                  <Text style={styles.lessonDescription}>{lesson.description || lesson.content[0].substring(0, 100) + '...'}</Text>
+                  <View style={styles.lessonMeta}>
+                    <Text style={styles.lessonTime}>{lesson.time}</Text>
+                    <Text style={styles.lessonProgress}>Progress: {lesson.progress || '0%'}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ))
+        ) : (
+          <View style={styles.noLessonsContainer}>
+            <Text style={styles.noLessonsText}>No lessons available yet.</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={() => setLoading(true)}>
+              <Text style={styles.retryButtonText}>Reload Lessons</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -174,13 +146,76 @@ export default function Money101Screen({ navigation }) { // <-- Receive navigati
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    width: '100%',
-    backgroundColor: '#f0f4f8', // Light background
-    paddingTop: 0, // <-- MODIFIED: Removed paddingTop
+    backgroundColor: '#f0f4f8',
+    paddingTop: 20,
   },
-  contentWrapper: {
-    flex: 1,
-    width: '100%',
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    textAlign: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 15,
+  },
+  scrollContent: {
+    paddingHorizontal: 15,
+    paddingBottom: 20,
+  },
+  categorySection: {
+    marginBottom: 20,
+  },
+  categoryHeader: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#34495e',
+    marginBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    paddingBottom: 5,
+  },
+  lessonCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  lessonTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#34495e',
+    marginBottom: 8,
+  },
+  lessonCategory: {
+    fontSize: 14,
+    color: '#7f8c8d',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  lessonDescription: {
+    fontSize: 16,
+    color: '#555',
+    lineHeight: 24,
+  },
+  lessonMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 5,
+  },
+  lessonTime: {
+    fontSize: 14,
+    color: '#7f8c8d',
+    fontStyle: 'italic',
+  },
+  lessonProgress: {
+    fontSize: 14,
+    color: '#2ecc71',
+    fontWeight: 'bold',
   },
   loadingContainer: {
     flex: 1,
@@ -201,118 +236,32 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   errorText: {
-    fontSize: 16,
-    color: 'red',
-    textAlign: 'center',
-  },
-  // Header Styles (Common for all Money 101 views)
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-  },
-  headerIconPlaceholder: {
-    width: 30, // Small circle placeholder
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#e0e0e0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerIconText: {
     fontSize: 18,
-    color: '#555',
-  },
-  backButton: {
-    paddingRight: 15,
-  },
-  backButtonText: {
-    fontSize: 24, // Larger back arrow
-    color: '#3498db',
-    fontWeight: 'bold',
-  },
-
-  // Category Grid Styles
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-around',
-    padding: 15,
-    flexGrow: 1,
-  },
-  categoryCard: {
-    width: '45%', // Roughly two columns
-    aspectRatio: 1, // Make it square
-    backgroundColor: '#ffffff',
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    margin: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 4,
-  },
-  categoryCardText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#34495e',
+    color: '#e74c3c',
     textAlign: 'center',
-  },
-
-  // Lessons List Styles
-  lessonsList: {
-    padding: 15,
-    flexGrow: 1,
-  },
-  lessonListItem: {
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  lessonListItemTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#34495e',
-    marginBottom: 5,
-  },
-  lessonListItemDesc: {
-    fontSize: 14,
-    color: '#555',
-  },
-
-  noContentText: {
-    fontSize: 16,
-    color: '#7f8c8d',
-    textAlign: 'center',
-    marginTop: 50,
-    width: '100%',
-  },
-  homeIconPlaceholder: {
-    alignSelf: 'center',
     marginBottom: 20,
-    marginTop: 'auto', // Pushes it to the bottom
+  },
+  retryButton: {
+    backgroundColor: '#3498db',
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: 8,
+    marginTop: 15,
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  noLessonsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  noLessonsText: {
+    fontSize: 18,
+    color: '#7f8c8d',
+    marginBottom: 15,
   },
 });
