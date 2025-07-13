@@ -11,18 +11,17 @@ import {
   Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Image // Import Image component for future visual elements
 } from 'react-native';
-// Removed Firestore imports for lesson content: import { collection, doc, getDoc } from 'firebase/firestore';
-// Removed db import as it's no longer used for lesson content, but keep if used elsewhere (e.g., auth)
-// import { db } from './firebaseConfig'; // Keep or remove based on other app needs
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Import AsyncStorage for progress tracking
 
 import lessonsData from './lessonsData'; // Import the hardcoded lessons data
 
 const { width } = Dimensions.get('window');
 
 export default function LessonDetailScreen({ route, navigation }) {
-  const { lessonId } = route.params; // Get the lesson ID passed from Money101Screen
+  const { lessonId, onLessonComplete } = route.params; // Get lesson ID and the callback for completion
 
   const [lesson, setLesson] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -50,6 +49,30 @@ export default function LessonDetailScreen({ route, navigation }) {
       contentRefs.current.delete(index); // Correctly delete if element is null
     }
   }, []);
+
+  // Effect to handle scrolling to highlighted content
+  useEffect(() => {
+    if (scrollToIndex !== null && contentRefs.current.has(scrollToIndex) && scrollViewRef.current) {
+      const targetRef = contentRefs.current.get(scrollToIndex);
+      if (targetRef) {
+        targetRef.measureLayout(
+          scrollViewRef.current,
+          (x, y, width, height) => {
+            scrollViewRef.current.scrollTo({ y: y - 50, animated: true }); // Scroll slightly above the element
+            setTempHighlightedIndex(scrollToIndex); // Apply temporary highlight
+            // Remove highlight after a short delay
+            setTimeout(() => {
+              setTempHighlightedIndex(null);
+            }, 3000); // Highlight for 3 seconds
+          },
+          (error) => {
+            console.error("Layout measurement failed", error);
+          }
+        );
+      }
+      setScrollToIndex(null); // Reset scroll index after attempting to scroll
+    }
+  }, [scrollToIndex]);
 
   // Load lesson data from hardcoded data
   useEffect(() => {
@@ -94,6 +117,20 @@ export default function LessonDetailScreen({ route, navigation }) {
     loadLesson();
   }, [lessonId]); // Re-load if lessonId changes
 
+  // Effect to update local userAnswer when currentQuestionIndex changes
+  useEffect(() => {
+    if (quizStarted && lesson && lesson.quiz && lesson.quiz.questions[currentQuestionIndex]) {
+      const questionId = lesson.quiz.questions[currentQuestionIndex].id;
+      const savedAnswer = userAnswers[questionId] || '';
+      setUserAnswer(savedAnswer); // Load saved answer for current question
+      console.log(`[QUIZ DEBUG] useEffect - Loaded answer for Q ID ${questionId}: "${savedAnswer}"`);
+    } else if (quizStarted && lesson && lesson.quiz && currentQuestionIndex >= lesson.quiz.questions.length) {
+        console.log("[QUIZ DEBUG] useEffect - currentQuestionIndex is out of bounds, likely after quiz submission.");
+        setUserAnswer(''); // Clear input if no question exists
+    }
+  }, [currentQuestionIndex, quizStarted, lesson, userAnswers]);
+
+
   // --- Quiz Logic ---
   const handleAnswerChange = (questionId, answer) => {
     setUserAnswers(prev => {
@@ -116,7 +153,7 @@ export default function LessonDetailScreen({ route, navigation }) {
     return false;
   };
 
-  const submitQuiz = () => {
+  const submitQuiz = async () => { // Made async to use await for AsyncStorage
     console.log("[QUIZ DEBUG] submitQuiz called.");
     if (!lesson || !lesson.quiz || lesson.quiz.questions.length === 0) {
         console.warn("[QUIZ DEBUG] submitQuiz: Lesson or quiz data missing/empty.");
@@ -152,6 +189,25 @@ export default function LessonDetailScreen({ route, navigation }) {
     });
     setQuizStarted(false); // Go to results view
     console.log("[QUIZ DEBUG] Quiz Submitted. Results:", { score: correctCount, total: lesson.quiz.questions.length, incorrectQuestions: incorrectQuestions });
+
+    // --- Mark Lesson as Completed if all correct ---
+    if (correctCount === lesson.quiz.questions.length) {
+      try {
+        const storedCompletedLessons = await AsyncStorage.getItem('completedLessons');
+        const completedLessonsArray = storedCompletedLessons ? JSON.parse(storedCompletedLessons) : [];
+        if (!completedLessonsArray.includes(lessonId)) {
+          completedLessonsArray.push(lessonId);
+          await AsyncStorage.setItem('completedLessons', JSON.stringify(completedLessonsArray));
+          console.log(`Lesson ${lessonId} marked as completed.`);
+          // Call the callback to refresh progress on the Money101Screen
+          if (onLessonComplete) {
+            onLessonComplete();
+          }
+        }
+      } catch (e) {
+        console.error("Failed to save completed lesson to AsyncStorage", e);
+      }
+    }
   };
 
   const resetQuiz = () => {
@@ -338,7 +394,61 @@ export default function LessonDetailScreen({ route, navigation }) {
                   tempHighlightedIndex === index && styles.tempHighlightedContent
                 ]}
               >
+                {/*
+                  // Future Enhancement: Render different content types (text, image, icon)
+                  // Example: If your lessonsData.js had content like:
+                  // { type: 'text', value: 'This is a paragraph.' },
+                  // { type: 'image', uri: 'https://placehold.co/300x200?text=MoneyConcept' },
+                  // { type: 'icon', name: 'money-bill' } // Using a hypothetical icon library
+                  // You would parse 'paragraph' (or 'item' if content was an array of objects)
+                  // and render accordingly.
+
+                  // For now, assuming 'paragraph' is always text:
+                */}
                 <Text style={styles.contentParagraph}>{paragraph}</Text>
+
+                {/* Placeholder for an image related to the concept */}
+                {/* Example: If you wanted an image after the first paragraph of a specific lesson */}
+                {lesson.id === 'budgeting-spending-lesson-1-hardcoded' && index === 0 && (
+                  <Image
+                    source={{ uri: 'https://placehold.co/300x150/8A2BE2/ffffff?text=Budget+Map' }}
+                    style={styles.conceptImage}
+                  />
+                )}
+                {lesson.id === 'saving-investing-lesson-2' && index === 1 && (
+                  <Image
+                    source={{ uri: 'https://placehold.co/300x150/4CAF50/ffffff?text=Compound+Interest' }}
+                    style={styles.conceptImage}
+                  />
+                )}
+                {lesson.id === 'credit-debt-lesson-1' && index === 0 && (
+                  <Image
+                    source={{ uri: 'https://placehold.co/300x150/FF6347/ffffff?text=Credit+Score' }}
+                    style={styles.conceptImage}
+                  />
+                )}
+                {lesson.id === 'income-taxes-lesson-1' && index === 2 && (
+                  <Image
+                    source={{ uri: 'https://placehold.co/300x150/00BFFF/ffffff?text=Paycheck+Breakdown' }}
+                    style={styles.conceptImage}
+                  />
+                )}
+                {lesson.id === 'financial-planning-lesson-1' && index === 1 && (
+                  <Image
+                    source={{ uri: 'https://placehold.co/300x150/6A5ACD/ffffff?text=SMART+Goals' }}
+                    style={styles.conceptImage}
+                  />
+                )}
+                {lesson.id === 'financial-literacy-lesson-2' && index === 2 && (
+                  <Image
+                    source={{ uri: 'https://placehold.co/300x150/FF4500/ffffff?text=Inflation' }}
+                    style={styles.conceptImage}
+                  />
+                )}
+
+                {/* You can add more conditional images/icons based on lessonId and index */}
+                {/* Or, modify lessonsData.js to include image/icon data directly within content objects */}
+
               </View>
             ))}
             <TouchableOpacity style={styles.startQuizButton} onPress={() => {
@@ -527,6 +637,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     color: '#34495e',
+  },
+  conceptImage: {
+    width: '100%', // Make image responsive to container width
+    height: 150, // Fixed height, adjust as needed
+    borderRadius: 8,
+    marginTop: 10,
+    marginBottom: 5,
+    resizeMode: 'contain', // Or 'cover', depending on desired effect
   },
   highlightedContent: {
     backgroundColor: '#fffacd', // Light yellow for highlight of incorrect answers
