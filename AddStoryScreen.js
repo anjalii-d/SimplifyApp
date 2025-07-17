@@ -1,41 +1,55 @@
 // AddStoryScreen.js
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, ScrollView } from 'react-native'; // <-- Ensure ScrollView is imported here
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, ScrollView } from 'react-native';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { db } from './firebaseConfig'; // Import your Firestore database instance
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { db } from './firebaseConfig';
+
+// Predefined tag options
+const TAG_OPTIONS = ['Budgeting', 'Saving', 'Investing', 'Debt', 'Income', 'Goals', 'Challenge', 'Success', 'Learning', 'Other'];
 
 export default function AddStoryScreen({ navigation }) {
   const [storyText, setStoryText] = useState('');
+  const [selectedTags, setSelectedTags] = useState(new Set()); // Using a Set for efficient tag management
+  const [customTag, setCustomTag] = useState(''); // For the 'Other' tag input
   const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState(null); // To store authenticated user
-  const [userId, setUserId] = useState(null); // To store the user ID
-  const [authReady, setAuthReady] = useState(false); // To track if auth is ready
+  const [userId, setUserId] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
 
   // Firebase Auth setup and listener
   useEffect(() => {
     const auth = getAuth();
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
-        setUser(currentUser);
         setUserId(currentUser.uid);
+        console.log("AddStoryScreen: User authenticated. UID:", currentUser.uid);
       } else {
-        // Sign in anonymously if no user is authenticated
-        try {
-          // No longer attempting anonymous sign-in here directly,
-          // as App.js handles the initial auth state.
-          // This component will wait for authReady from App.js's listener.
-          console.log("AddStoryScreen: User not authenticated on mount. Waiting for App.js auth state.");
-        } catch (error) {
-          console.error("AddStoryScreen Auth Error:", error);
-        }
+        setUserId(null);
+        console.log("AddStoryScreen: No user authenticated.");
       }
-      setAuthReady(true); // Auth state is now determined (either logged in or not)
+      setAuthReady(true);
+      console.log("AddStoryScreen: Auth state ready.");
     });
 
-    // Clean up the subscription
     return () => unsubscribe();
   }, []);
+
+  // Function to toggle tag selection
+  const handleTagPress = (tag) => {
+    setSelectedTags(prevTags => {
+      const newTags = new Set(prevTags);
+      if (newTags.has(tag)) {
+        newTags.delete(tag);
+        // If 'Other' is deselected, clear custom tag input
+        if (tag === 'Other') {
+          setCustomTag('');
+        }
+      } else {
+        newTags.add(tag);
+      }
+      return newTags;
+    });
+  };
 
   const handleSubmitStory = async () => {
     if (!storyText.trim()) {
@@ -44,28 +58,54 @@ export default function AddStoryScreen({ navigation }) {
     }
     if (!authReady || !userId) {
       Alert.alert("Authentication Pending", "Please wait while we prepare for submission. If this persists, try restarting the app.");
+      console.log("AddStoryScreen: Submission blocked. Not authenticated or auth not ready. userId:", userId, "authReady:", authReady); // Log auth status
       return;
     }
 
+    // Prepare tags for submission
+    const tagsToSubmit = Array.from(selectedTags);
+    if (selectedTags.has('Other') && customTag.trim()) {
+      const cleanedCustomTag = customTag.trim();
+      // Only add the custom tag if it's not empty and not just "Other" itself
+      if (cleanedCustomTag.length > 0 && cleanedCustomTag.toLowerCase() !== 'other' && !tagsToSubmit.some(tag => tag.toLowerCase() === cleanedCustomTag.toLowerCase())) {
+        tagsToSubmit.push(cleanedCustomTag);
+      }
+    }
+    // Remove "Other" if it was just a placeholder and no custom tag was entered, or if a custom tag was added
+    const finalTags = tagsToSubmit.filter(tag => tag !== 'Other' || (tag === 'Other' && customTag.trim()));
+
+
     setLoading(true);
     try {
-      // Reference to the 'stories' collection
-      const storiesCollectionRef = collection(db, 'stories');
+      // MANDATORY: Use __app_id for Firestore paths
+      const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+      const collectionPath = `artifacts/${appId}/public/data/stories`; // Define collection path
 
-      await addDoc(storiesCollectionRef, {
+      console.log("AddStoryScreen: Attempting to add story...");
+      console.log("AddStoryScreen: User ID:", userId);
+      console.log("AddStoryScreen: App ID:", appId);
+      console.log("AddStoryScreen: Collection Path:", collectionPath);
+      console.log("AddStoryScreen: Story Text:", storyText);
+      console.log("AddStoryScreen: Final Tags:", finalTags);
+
+
+      await addDoc(collection(db, collectionPath), { // Use collectionPath here
         text: storyText,
-        userId: userId, // Store the ID of the user who posted
-        timestamp: serverTimestamp(), // Firebase server timestamp for consistency
-        likes: 0, // Initial likes count
-        commentsCount: 0, // Initial comments count
+        userId: userId,
+        timestamp: serverTimestamp(),
+        likes: 0,
+        commentsCount: 0,
+        tags: finalTags,
       });
 
-      setStoryText(''); // Clear input after successful submission
+      setStoryText('');
+      setSelectedTags(new Set());
+      setCustomTag('');
       Alert.alert("Success!", "Your story has been added to the feed!");
-      navigation.goBack(); // Go back to the Reality Feed screen
+      navigation.goBack();
     } catch (error) {
-      console.error("Error adding story: ", error);
-      Alert.alert("Submission Failed", "There was an error adding your story. Please try again.");
+      console.error("AddStoryScreen: Error adding story:", error); // Log the full error object
+      Alert.alert("Submission Failed", `There was an error adding your story: ${error.message || 'Unknown error'}. Please try again.`);
     } finally {
       setLoading(false);
     }
@@ -81,7 +121,7 @@ export default function AddStoryScreen({ navigation }) {
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Add Your Story</Text>
-        <View style={styles.headerRightPlaceholder} /> {/* For alignment */}
+        <View style={styles.headerRightPlaceholder} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -93,8 +133,41 @@ export default function AddStoryScreen({ navigation }) {
           multiline
           value={storyText}
           onChangeText={setStoryText}
-          editable={!loading && authReady} // Disable input while loading or if auth not ready
+          editable={!loading && authReady}
         />
+
+        <Text style={styles.tagsLabel}>Select Tags (Optional):</Text>
+        <View style={styles.tagsContainer}>
+          {TAG_OPTIONS.map((tag) => (
+            <TouchableOpacity
+              key={tag}
+              style={[
+                styles.tagButton,
+                selectedTags.has(tag) && styles.selectedTagButton,
+              ]}
+              onPress={() => handleTagPress(tag)}
+              disabled={!loading && !authReady} // Disable if loading or auth not ready
+            >
+              <Text style={[
+                styles.tagButtonText,
+                selectedTags.has(tag) && styles.selectedTagButtonText,
+              ]}>
+                {tag}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {selectedTags.has('Other') && (
+          <TextInput
+            style={styles.customTagInput}
+            placeholder="Enter custom tag (e.g., 'Side Hustle')"
+            placeholderTextColor="#999"
+            value={customTag}
+            onChangeText={setCustomTag}
+            editable={!loading && authReady}
+          />
+        )}
 
         <TouchableOpacity
           style={[styles.submitButton, (!authReady || loading) && styles.submitButtonDisabled]}
@@ -120,7 +193,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f0f4f8',
-    paddingTop: 40, // Adjust for status bar
+    paddingTop: 0,
   },
   header: {
     flexDirection: 'row',
@@ -151,7 +224,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   headerRightPlaceholder: {
-    width: 24, // To balance the back button on the left
+    width: 24,
   },
   scrollContent: {
     flexGrow: 1,
@@ -176,7 +249,59 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
     borderWidth: 1,
     marginBottom: 20,
-    textAlignVertical: 'top', // For multiline input on Android
+    textAlignVertical: 'top',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  tagsLabel: {
+    fontSize: 16,
+    color: '#34495e',
+    marginBottom: 10,
+    alignSelf: 'flex-start',
+    fontWeight: '600',
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    width: '100%',
+    marginBottom: 15,
+  },
+  tagButton: {
+    backgroundColor: '#e0e0e0',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#ccc',
+  },
+  selectedTagButton: {
+    backgroundColor: '#3498db',
+    borderColor: '#3498db',
+  },
+  tagButtonText: {
+    color: '#555',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  selectedTagButtonText: {
+    color: '#ffffff',
+  },
+  customTagInput: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    padding: 15,
+    fontSize: 16,
+    color: '#333',
+    borderColor: '#e0e0e0',
+    borderWidth: 1,
+    marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -184,7 +309,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   submitButton: {
-    backgroundColor: '#2ecc71', // Green submit button
+    backgroundColor: '#2ecc71',
     paddingVertical: 15,
     paddingHorizontal: 30,
     borderRadius: 10,
@@ -196,9 +321,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 5,
     elevation: 5,
+    marginTop: 10,
   },
   submitButtonDisabled: {
-    backgroundColor: '#a0d9b5', // Lighter green when disabled
+    backgroundColor: '#a0d9b5',
   },
   submitButtonText: {
     color: '#ffffff',
@@ -210,4 +336,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#7f8c8d',
   },
-})
+});
