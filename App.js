@@ -1,6 +1,6 @@
 // App.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native'; // Removed SafeAreaView from here
+import { View, Text, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,13 +18,13 @@ import AddStoryScreen from './AddStoryScreen';
 import RealityFeedScreen from './RealityFeedScreen';
 import Money101Screen from './Money101Screen';
 import PathPeekScreen from './PathPeekScreen';
-import ProfileScreen from './ProfileScreen'; // Import the ProfileScreen
+import ProfileScreen from './ProfileScreen';
 import LessonDetailScreen from './LessonDetailScreen';
 
 
 const Stack = createStackNavigator();
 const ONBOARDING_COMPLETED_KEY = '@SimplifyApp:onboardingCompleted';
-const HAS_LAUNCHED_BEFORE_KEY = '@SimplifyApp:hasLaunchedBefore'; // NEW: Key for first launch check
+const HAS_LAUNCHED_BEFORE_KEY = '@SimplifyApp:hasLaunchedBefore'; // Key for first launch check
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -32,8 +32,7 @@ export default function App() {
   const [hasLaunchedBefore, setHasLaunchedBefore] = useState(null); // null means not checked yet
   const [isLoadingInitialData, setIsLoadingInitialData] = useState(true); // Combines all loading states
 
-  // Add a console log to see if the App component is rendering at all
-  console.log("App.js: App component rendering...");
+  console.log("App.js: App component rendering..."); // Added for web debugging
 
   useEffect(() => {
     let unsubscribeAuth;
@@ -121,7 +120,11 @@ export default function App() {
   console.log("App.js: Determined initial route:", initialRouteName);
 
   return (
-    <View style={styles.safeArea}> {/* Changed from SafeAreaView to View */}
+    <View style={styles.safeArea}>
+      {/* TEMPORARY DEBUG TEXT: If you see this, React Native Web is rendering! */}
+      {/* You can remove this line once the app loads correctly. */}
+      {/* <Text style={{ color: 'red', fontSize: 20, position: 'absolute', top: 0, zIndex: 9999 }}>DEBUG: App Rendering!</Text> */}
+
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
           <Stack.Screen name="Splash" component={SplashScreen} />
@@ -134,7 +137,7 @@ export default function App() {
           <Stack.Screen name="RealityFeed" component={RealityFeedScreen} />
           <Stack.Screen name="Money101" component={Money101Screen} />
           <Stack.Screen name="PathPeek" component={PathPeekScreen} />
-          <Stack.Screen name="Profile" component={ProfileScreen} /> {/* Added ProfileScreen */}
+          <Stack.Screen name="Profile" component={ProfileScreen} />
           <Stack.Screen name="LessonDetail" component={LessonDetailScreen} />
         </Stack.Navigator>
       </NavigationContainer>
@@ -143,11 +146,11 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { // Renamed from safeArea to container for clarity, but kept styles
+  safeArea: {
     flex: 1,
     backgroundColor: '#f0f4f8',
-    width: '100%', // Ensure it takes full width
-    height: '100%', // Ensure it takes full height
+    width: '100%',
+    height: '100%',
   },
   loadingContainer: {
     flex: 1,
