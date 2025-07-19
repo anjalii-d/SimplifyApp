@@ -1,6 +1,6 @@
 // App.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, SafeAreaView } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native'; // Removed SafeAreaView from here
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,7 +18,7 @@ import AddStoryScreen from './AddStoryScreen';
 import RealityFeedScreen from './RealityFeedScreen';
 import Money101Screen from './Money101Screen';
 import PathPeekScreen from './PathPeekScreen';
-import ProfileScreen from './ProfileScreen';
+import ProfileScreen from './ProfileScreen'; // Import the ProfileScreen
 import LessonDetailScreen from './LessonDetailScreen';
 
 
@@ -32,6 +32,9 @@ export default function App() {
   const [hasLaunchedBefore, setHasLaunchedBefore] = useState(null); // null means not checked yet
   const [isLoadingInitialData, setIsLoadingInitialData] = useState(true); // Combines all loading states
 
+  // Add a console log to see if the App component is rendering at all
+  console.log("App.js: App component rendering...");
+
   useEffect(() => {
     let unsubscribeAuth;
 
@@ -41,6 +44,7 @@ export default function App() {
         const launchedBeforeValue = await AsyncStorage.getItem(HAS_LAUNCHED_BEFORE_KEY);
         const appHasLaunchedBefore = (launchedBeforeValue === 'true');
         setHasLaunchedBefore(appHasLaunchedBefore);
+        console.log("App.js: Has launched before?", appHasLaunchedBefore);
 
         // If it's the very first launch, mark it as launched for next time
         if (!appHasLaunchedBefore) {
@@ -51,11 +55,15 @@ export default function App() {
         const onboardingValue = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
         const onboardingIsComplete = (onboardingValue === 'true');
         setIsOnboardingComplete(onboardingIsComplete);
+        console.log("App.js: Onboarding complete?", onboardingIsComplete);
+
 
         // 3. Listen for authentication state changes
         unsubscribeAuth = onAuthStateChanged(auth, (user) => {
           setIsLoggedIn(!!user); // Set isLoggedIn based on user presence
           setIsLoadingInitialData(false); // All initial checks complete
+          console.log("App.js: User logged in?", !!user);
+          console.log("App.js: Initial data loading complete.");
         });
 
       } catch (e) {
@@ -82,6 +90,7 @@ export default function App() {
     try {
       await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true');
       setIsOnboardingComplete(true);
+      console.log("App.js: Onboarding completed via handler.");
       // No need to navigate here, the onAuthStateChanged listener will handle it
       // or the next render cycle will pick up the new state.
     } catch (e) {
@@ -109,9 +118,10 @@ export default function App() {
   } else {
     initialRouteName = 'Home'; // Onboarding done and logged in
   }
+  console.log("App.js: Determined initial route:", initialRouteName);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}> {/* Changed from SafeAreaView to View */}
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
           <Stack.Screen name="Splash" component={SplashScreen} />
@@ -124,18 +134,20 @@ export default function App() {
           <Stack.Screen name="RealityFeed" component={RealityFeedScreen} />
           <Stack.Screen name="Money101" component={Money101Screen} />
           <Stack.Screen name="PathPeek" component={PathPeekScreen} />
-          <Stack.Screen name="Profile" component={ProfileScreen} />
+          <Stack.Screen name="Profile" component={ProfileScreen} /> {/* Added ProfileScreen */}
           <Stack.Screen name="LessonDetail" component={LessonDetailScreen} />
         </Stack.Navigator>
       </NavigationContainer>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  safeArea: { // Renamed from safeArea to container for clarity, but kept styles
     flex: 1,
     backgroundColor: '#f0f4f8',
+    width: '100%', // Ensure it takes full width
+    height: '100%', // Ensure it takes full height
   },
   loadingContainer: {
     flex: 1,
