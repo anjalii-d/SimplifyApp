@@ -4,12 +4,13 @@ import { StyleSheet, View, Text, ScrollView, TouchableOpacity, ActivityIndicator
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function LessonDetailScreen({ route, navigation }) {
-  // The lesson object is passed directly via route.params
   const { lesson, onLessonComplete } = route.params;
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [userAnswer, setUserAnswer] = useState('');
   const [feedback, setFeedback] = useState(null); // { type: 'correct' | 'incorrect', message: string }
+  const [quizScore, setQuizScore] = useState(0); // Track correct answers for XP
+  const [xpAwardedForLesson, setXpAwardedForLesson] = useState(false); // To prevent multiple XP awards
 
   // Check if lesson data is valid
   if (!lesson || !lesson.content) {
@@ -25,11 +26,31 @@ export default function LessonDetailScreen({ route, navigation }) {
 
   const currentQuestion = lesson.quiz?.questions[currentQuestionIndex];
 
+  // Function to add XP
+  const addXp = async (amount) => {
+    if (amount <= 0) return; // Ensure positive XP
+
+    try {
+      const currentXpString = await AsyncStorage.getItem('userXP');
+      const currentXp = currentXpString ? parseInt(currentXpString) : 0;
+      const newXp = currentXp + amount;
+      await AsyncStorage.setItem('userXP', newXp.toString());
+      console.log(`XP updated: ${currentXp} + ${amount} = ${newXp}`);
+
+      // Optionally, show a toast or notification to the user about XP gained
+      Alert.alert("XP Gained!", `You earned ${amount} XP! Total XP: ${newXp}`);
+
+    } catch (e) {
+      console.error("Failed to update XP in AsyncStorage", e);
+    }
+  };
+
   const handleAnswerSubmit = async () => {
     if (!currentQuestion) return;
 
     let isCorrect = false;
     let feedbackMessage = '';
+    let xpForQuestion = 0; // XP for this specific question
 
     if (currentQuestion.type === 'mc' || currentQuestion.type === 'tf') {
       isCorrect = userAnswer === currentQuestion.correctAnswer;
@@ -41,24 +62,43 @@ export default function LessonDetailScreen({ route, navigation }) {
 
     if (isCorrect) {
       feedbackMessage = 'Correct! Great job.';
+      xpForQuestion = lesson.quiz?.xpPerCorrectAnswer || 0; // Get XP from lesson data
       setFeedback({ type: 'correct', message: feedbackMessage });
+      setQuizScore(prevScore => prevScore + 1); // Increment quiz score
+      if (xpForQuestion > 0) {
+        // Award XP immediately for correct answer (optional, could also be aggregated)
+        // addXp(xpForQuestion);
+        // We'll aggregate XP and award at quiz completion to avoid too many alerts.
+      }
     } else {
       feedbackMessage = 'Not quite. Review the highlighted content.';
       setFeedback({ type: 'incorrect', message: feedbackMessage });
     }
 
-    // If this is the last question and it's correct, mark lesson as complete
+    // If this is the last question, and it's correct, mark lesson as complete and award lesson XP
     if (isCorrect && lesson.quiz && currentQuestionIndex === lesson.quiz.questions.length - 1) {
       try {
         const storedCompletedLessons = await AsyncStorage.getItem('completedLessons');
         const completedLessonsSet = storedCompletedLessons ? new Set(JSON.parse(storedCompletedLessons)) : new Set();
-        completedLessonsSet.add(lesson.id);
-        await AsyncStorage.setItem('completedLessons', JSON.stringify(Array.from(completedLessonsSet)));
+
+        if (!completedLessonsSet.has(lesson.id)) { // Only award XP if lesson hasn't been completed before
+          completedLessonsSet.add(lesson.id);
+          await AsyncStorage.setItem('completedLessons', JSON.stringify(Array.from(completedLessonsSet)));
+
+          const totalQuizXp = (quizScore + (isCorrect ? 1 : 0)) * (lesson.quiz?.xpPerCorrectAnswer || 0); // Include current question if correct
+          const totalLessonXp = (lesson.xpAward || 0) + totalQuizXp;
+
+          if (totalLessonXp > 0) {
+            await addXp(totalLessonXp);
+          }
+          setXpAwardedForLesson(true); // Mark that XP has been awarded
+        }
+
         if (onLessonComplete) {
           onLessonComplete(); // Notify parent (Money101Screen) to refresh completed status
         }
       } catch (e) {
-        console.error("Failed to save completed lesson to AsyncStorage", e);
+        console.error("Failed to save completed lesson or award XP to AsyncStorage", e);
       }
     }
   };
@@ -69,33 +109,44 @@ export default function LessonDetailScreen({ route, navigation }) {
     if (lesson.quiz && currentQuestionIndex < lesson.quiz.questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
+      // Logic for quiz completion
+      let completionMessage = "You've finished the quiz for this lesson!";
+      if (lesson.quiz && lesson.quiz.questions.length > 0) {
+          const totalQuestions = lesson.quiz.questions.length;
+          const finalQuizScore = quizScore + (feedback && feedback.type === 'correct' ? 1 : 0); // Add score for the last question if correct
+          completionMessage += ` You answered ${finalQuizScore} out of ${totalQuestions} questions correctly.`;
+      }
+      if (xpAwardedForLesson) {
+          completionMessage += "\nXP for this lesson has been awarded!";
+      }
+
       Alert.alert(
         "Quiz Complete!",
-        "You've finished the quiz for this lesson!",
-        [{ text: "OK", onPress: () => {
-          setCurrentQuestionIndex(0); // Reset for next time
-          // Optionally navigate back to roadmap or keep on lesson detail
-          // navigation.goBack();
-        }}]
+        completionMessage,
+        [{
+          text: "OK", onPress: () => {
+            setCurrentQuestionIndex(0); // Reset for next time
+            setQuizScore(0); // Reset quiz score
+            setXpAwardedForLesson(false); // Reset XP awarded status
+            // navigation.goBack(); // Optionally navigate back
+          }
+        }]
       );
     }
   };
 
   // Function to determine if a content paragraph should be highlighted
   const getParagraphStyle = (index) => {
-    // Check if there's a question related to this paragraph that was answered incorrectly
     const questionRelatedToParagraph = lesson.quiz?.questions.find(
       (q) => q.relatedContentIndex === index
     );
 
-    // If a related question exists and the feedback indicates an incorrect answer
     if (feedback && feedback.type === 'incorrect' && questionRelatedToParagraph &&
         questionRelatedToParagraph.id === currentQuestion?.id) {
       return styles.highlightedParagraph;
     }
     return {};
   };
-
 
   return (
     <View style={styles.container}>
@@ -105,7 +156,7 @@ export default function LessonDetailScreen({ route, navigation }) {
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{lesson.title}</Text>
-        <View style={styles.headerRightPlaceholder} /> {/* For alignment */}
+        <View style={styles.headerRightPlaceholder} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -204,7 +255,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f0f4f8',
-    paddingTop: 0, // Header handles top padding
+    paddingTop: 0,
   },
   header: {
     flexDirection: 'row',
@@ -225,8 +276,8 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     color: '#2c3e50',
-    flex: 1, // Allow title to take available space
-    textAlign: 'center', // Center the title
+    flex: 1,
+    textAlign: 'center',
   },
   backButton: {
     paddingRight: 15,
@@ -237,12 +288,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   headerRightPlaceholder: {
-    width: 24, // To balance the back button
+    width: 24,
   },
   scrollContent: {
     flexGrow: 1,
     padding: 20,
-    paddingBottom: 40, // Extra padding at bottom for scroll
+    paddingBottom: 40,
   },
   lessonTime: {
     fontSize: 14,
@@ -271,12 +322,12 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: '100%',
-    aspectRatio: 16 / 9, // Common aspect ratio for images
+    aspectRatio: 16 / 9,
     borderRadius: 8,
     overflow: 'hidden',
     marginTop: 10,
     marginBottom: 10,
-    backgroundColor: '#e0e0e0', // Placeholder background for images
+    backgroundColor: '#e0e0e0',
   },
   lessonImage: {
     width: '100%',
@@ -288,11 +339,11 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   highlightedParagraph: {
-    backgroundColor: '#fff3cd', // Light yellow for highlight
+    backgroundColor: '#fff3cd',
     borderRadius: 5,
     padding: 8,
     borderWidth: 1,
-    borderColor: '#ffc107', // Darker yellow border
+    borderColor: '#ffc107',
   },
   quizSection: {
     backgroundColor: '#ffffff',
@@ -328,8 +379,8 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
   },
   selectedOption: {
-    backgroundColor: '#d1e7dd', // Light green for selected
-    borderColor: '#28a745', // Green border
+    backgroundColor: '#d1e7dd',
+    borderColor: '#28a745',
   },
   optionText: {
     fontSize: 15,
