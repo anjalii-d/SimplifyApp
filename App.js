@@ -1,15 +1,15 @@
 // App.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Import auth and db directly from your firebaseConfig.js
-import { auth, db } from './firebaseConfig';
+// Firebase
+import { auth } from './firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 
-// Import your screens
+// Screens
 import SplashScreen from './SplashScreen';
 import OnboardingSlideshow from './OnboardingSlideshow';
 import LoginScreen from './LoginScreen';
@@ -21,53 +21,42 @@ import PathPeekScreen from './PathPeekScreen';
 import ProfileScreen from './ProfileScreen';
 import LessonDetailScreen from './LessonDetailScreen';
 
-
 const Stack = createStackNavigator();
 const ONBOARDING_COMPLETED_KEY = '@SimplifyApp:onboardingCompleted';
-const HAS_LAUNCHED_BEFORE_KEY = '@SimplifyApp:hasLaunchedBefore'; // Key for first launch check
+const HAS_LAUNCHED_BEFORE_KEY = '@SimplifyApp:hasLaunchedBefore';
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isOnboardingComplete, setIsOnboardingComplete] = useState(false);
-  const [hasLaunchedBefore, setHasLaunchedBefore] = useState(null); // null means not checked yet
-  const [isLoadingInitialData, setIsLoadingInitialData] = useState(true); // Combines all loading states
-
-  console.log("App.js: App component rendering..."); // Added for web debugging
+  const [hasLaunchedBefore, setHasLaunchedBefore] = useState(null); // null = not yet checked
+  const [isLoadingInitialData, setIsLoadingInitialData] = useState(true);
 
   useEffect(() => {
     let unsubscribeAuth;
 
     const checkInitialStatus = async () => {
       try {
-        // 1. Check if app has launched before
+        // First launch check
         const launchedBeforeValue = await AsyncStorage.getItem(HAS_LAUNCHED_BEFORE_KEY);
-        const appHasLaunchedBefore = (launchedBeforeValue === 'true');
+        const appHasLaunchedBefore = launchedBeforeValue === 'true';
         setHasLaunchedBefore(appHasLaunchedBefore);
-        console.log("App.js: Has launched before?", appHasLaunchedBefore);
 
-        // If it's the very first launch, mark it as launched for next time
         if (!appHasLaunchedBefore) {
           await AsyncStorage.setItem(HAS_LAUNCHED_BEFORE_KEY, 'true');
         }
 
-        // 2. Check onboarding status
+        // Onboarding check
         const onboardingValue = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
-        const onboardingIsComplete = (onboardingValue === 'true');
+        const onboardingIsComplete = onboardingValue === 'true';
         setIsOnboardingComplete(onboardingIsComplete);
-        console.log("App.js: Onboarding complete?", onboardingIsComplete);
 
-
-        // 3. Listen for authentication state changes
+        // Firebase auth listener
         unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-          setIsLoggedIn(!!user); // Set isLoggedIn based on user presence
-          setIsLoadingInitialData(false); // All initial checks complete
-          console.log("App.js: User logged in?", !!user);
-          console.log("App.js: Initial data loading complete.");
+          setIsLoggedIn(!!user);
+          setIsLoadingInitialData(false);
         });
-
       } catch (e) {
-        console.error("App.js: Failed to load initial app status:", e);
-        // In case of error, default to assuming it's not the first launch and not logged in
+        console.error("App.js: Failed to load app status:", e);
         setHasLaunchedBefore(true);
         setIsOnboardingComplete(false);
         setIsLoggedIn(false);
@@ -78,26 +67,20 @@ export default function App() {
     checkInitialStatus();
 
     return () => {
-      if (unsubscribeAuth) {
-        unsubscribeAuth(); // Clean up auth listener
-      }
+      if (unsubscribeAuth) unsubscribeAuth();
     };
   }, []);
 
-  // Handler for when onboarding is explicitly completed from the slideshow
   const handleOnboardingComplete = async () => {
     try {
       await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true');
       setIsOnboardingComplete(true);
-      console.log("App.js: Onboarding completed via handler.");
-      // No need to navigate here, the onAuthStateChanged listener will handle it
-      // or the next render cycle will pick up the new state.
     } catch (e) {
       console.error("Failed to save onboarding status to AsyncStorage", e);
     }
   };
 
-  if (isLoadingInitialData || hasLaunchedBefore === null) { // Wait until all checks are done
+  if (isLoadingInitialData || hasLaunchedBefore === null) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3498db" />
@@ -106,39 +89,47 @@ export default function App() {
     );
   }
 
-  // Determine the initial route based on the checks
-  let initialRouteName;
+  // Determine initial route explicitly based on state:
+  let initialRouteName = 'Login'; // default fallback
   if (!hasLaunchedBefore) {
-    initialRouteName = 'Splash'; // First ever launch, go to Splash
+    initialRouteName = 'Splash';
   } else if (!isOnboardingComplete) {
-    initialRouteName = 'OnboardingSlideshow'; // Not first launch, but onboarding not done
-  } else if (!isLoggedIn) {
-    initialRouteName = 'Login'; // Onboarding done, but not logged in
-  } else {
-    initialRouteName = 'Home'; // Onboarding done and logged in
+    initialRouteName = 'OnboardingSlideshow';
+  } else if (isLoggedIn) {
+    initialRouteName = 'Home';
   }
-  console.log("App.js: Determined initial route:", initialRouteName);
 
   return (
     <View style={styles.safeArea}>
-      {/* TEMPORARY DEBUG TEXT: If you see this, React Native Web is rendering! */}
-      {/* You can remove this line once the app loads correctly. */}
-      {/* <Text style={{ color: 'red', fontSize: 20, position: 'absolute', top: 0, zIndex: 9999 }}>DEBUG: App Rendering!</Text> */}
-
       <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
-          <Stack.Screen name="Splash" component={SplashScreen} />
-          <Stack.Screen name="OnboardingSlideshow">
-            {props => <OnboardingSlideshow {...props} onOnboardingComplete={handleOnboardingComplete} />}
-          </Stack.Screen>
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="AddStory" component={AddStoryScreen} />
-          <Stack.Screen name="RealityFeed" component={RealityFeedScreen} />
-          <Stack.Screen name="Money101" component={Money101Screen} />
-          <Stack.Screen name="PathPeek" component={PathPeekScreen} />
-          <Stack.Screen name="Profile" component={ProfileScreen} />
-          <Stack.Screen name="LessonDetail" component={LessonDetailScreen} />
+        <Stack.Navigator
+          screenOptions={{ headerShown: false }}
+          initialRouteName={initialRouteName}
+        >
+          {isLoggedIn ? (
+            <>
+              <Stack.Screen name="Home" component={HomeScreen} />
+              <Stack.Screen name="AddStory" component={AddStoryScreen} />
+              <Stack.Screen name="RealityFeed" component={RealityFeedScreen} />
+              <Stack.Screen name="Money101" component={Money101Screen} />
+              <Stack.Screen name="PathPeek" component={PathPeekScreen} />
+              <Stack.Screen name="Profile" component={ProfileScreen} />
+              <Stack.Screen name="LessonDetail" component={LessonDetailScreen} />
+            </>
+          ) : !hasLaunchedBefore ? (
+            <Stack.Screen name="Splash" component={SplashScreen} />
+          ) : !isOnboardingComplete ? (
+            <Stack.Screen name="OnboardingSlideshow">
+              {props => (
+                <OnboardingSlideshow
+                  {...props}
+                  onOnboardingComplete={handleOnboardingComplete}
+                />
+              )}
+            </Stack.Screen>
+          ) : (
+            <Stack.Screen name="Login" component={LoginScreen} />
+          )}
         </Stack.Navigator>
       </NavigationContainer>
     </View>

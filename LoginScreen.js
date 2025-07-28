@@ -1,16 +1,16 @@
 // LoginScreen.js
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from './firebaseConfig'; // Use your shared auth instance
 
-export default function LoginScreen({ navigation }) { // <-- Receive navigation prop
+export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false); // State for loading indicator
-
-  const auth = getAuth();
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
+    console.log("Login button pressed");
     if (!email || !password) {
       Alert.alert("Input Error", "Please enter both email and password.");
       return;
@@ -20,10 +20,10 @@ export default function LoginScreen({ navigation }) { // <-- Receive navigation 
     try {
       await signInWithEmailAndPassword(auth, email, password);
       console.log("User logged in successfully!");
-      // App.js's onAuthStateChanged listener will now handle navigation to Home
     } catch (error) {
       console.error("Login failed:", error.message);
-      let errorMessage = "Login failed. Please check your credentials.";
+
+      let errorMessage;
       switch (error.code) {
         case 'auth/invalid-email':
           errorMessage = "The email address is not valid.";
@@ -38,10 +38,10 @@ export default function LoginScreen({ navigation }) { // <-- Receive navigation 
           errorMessage = "Incorrect password. Please try again.";
           break;
         case 'auth/too-many-requests':
-          errorMessage = "Too many login attempts. Please try again later.";
+          errorMessage = "Too many login attempts. Please wait and try again later.";
           break;
         default:
-          errorMessage = `Login failed: ${error.message}`; // Fallback for unexpected errors
+          errorMessage = "Login failed. Please check your credentials.";
       }
       Alert.alert("Login Error", errorMessage);
     } finally {
@@ -50,6 +50,7 @@ export default function LoginScreen({ navigation }) { // <-- Receive navigation 
   };
 
   const handleSignUp = async () => {
+    console.log("Sign Up button pressed");
     if (!email || !password) {
       Alert.alert("Input Error", "Please enter both email and password.");
       return;
@@ -64,10 +65,10 @@ export default function LoginScreen({ navigation }) { // <-- Receive navigation 
       await createUserWithEmailAndPassword(auth, email, password);
       console.log("User signed up successfully!");
       Alert.alert("Success!", "Account created! You are now logged in.");
-      // App.js's onAuthStateChanged listener will now handle navigation to Home
     } catch (error) {
       console.error("Sign up failed:", error.message);
-      let errorMessage = "Sign up failed. Please try again.";
+
+      let errorMessage;
       switch (error.code) {
         case 'auth/email-already-in-use':
           errorMessage = "This email is already in use. Please log in or use a different email.";
@@ -76,13 +77,13 @@ export default function LoginScreen({ navigation }) { // <-- Receive navigation 
           errorMessage = "The email address is not valid.";
           break;
         case 'auth/operation-not-allowed':
-          errorMessage = "Email/Password sign-up is not enabled. Please contact support."; // This is the error if not enabled
+          errorMessage = "Email/Password sign-up is not enabled. Please contact support.";
           break;
         case 'auth/weak-password':
           errorMessage = "The password is too weak. Please choose a stronger password.";
           break;
         default:
-          errorMessage = `Sign up failed: ${error.message}`; // Fallback for unexpected errors
+          errorMessage = `Sign up failed: ${error.message}`;
       }
       Alert.alert("Sign Up Error", errorMessage);
     } finally {
@@ -92,10 +93,9 @@ export default function LoginScreen({ navigation }) { // <-- Receive navigation 
 
   return (
     <View style={styles.container}>
-      {/* NEW: Back Button */}
       <TouchableOpacity
         style={styles.backButton}
-        onPress={() => navigation.navigate('Splash')} // Navigate back to the Splash screen
+        onPress={() => navigation.navigate('Splash')}
       >
         <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
@@ -158,17 +158,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f4f8',
     padding: 20,
   },
-  // NEW: Back Button Styles
   backButton: {
     position: 'absolute',
-    top: 40, // Adjust based on SafeAreaView and status bar height
+    top: 40,
     left: 20,
     zIndex: 10,
     padding: 10,
   },
   backButtonText: {
     fontSize: 24,
-    color: '#34495e', // Darker color for the arrow
+    color: '#34495e',
     fontWeight: 'bold',
   },
   title: {

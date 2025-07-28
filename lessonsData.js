@@ -1069,7 +1069,6 @@ const lessonsData = [
   },
 
 // --- Financial Planning & Milestones: Future Frontier & Dream Destinations (🚀) ---
-const lessonsData = [
   {
     id: "smart-goals-dream-destinations",
     title: "SMART Goals: Your Dream Destinations",
