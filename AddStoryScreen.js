@@ -1,4 +1,3 @@
-// AddStoryScreen.js
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, ScrollView } from 'react-native';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -8,6 +7,21 @@ import { db } from './firebaseConfig';
 // Predefined tag options
 const TAG_OPTIONS = ['Budgeting', 'Saving', 'Investing', 'Debt', 'Income', 'Goals', 'Challenge', 'Success', 'Learning', 'Other'];
 
+// Helper component for a custom alert box, replacing the native Alert
+const CustomAlert = ({ message, visible, onClose }) => {
+  if (!visible) return null;
+  return (
+    <View style={alertStyles.overlay}>
+      <View style={alertStyles.container}>
+        <Text style={alertStyles.message}>{message}</Text>
+        <TouchableOpacity onPress={onClose} style={alertStyles.button}>
+          <Text style={alertStyles.buttonText}>OK</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
 export default function AddStoryScreen({ navigation }) {
   const [storyText, setStoryText] = useState('');
   const [selectedTags, setSelectedTags] = useState(new Set()); // Using a Set for efficient tag management
@@ -15,6 +29,14 @@ export default function AddStoryScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+
+  // Function to show the custom alert
+  const showAlert = (message) => {
+    setAlertMessage(message);
+    setAlertVisible(true);
+  };
 
   // Firebase Auth setup and listener
   useEffect(() => {
@@ -53,11 +75,11 @@ export default function AddStoryScreen({ navigation }) {
 
   const handleSubmitStory = async () => {
     if (!storyText.trim()) {
-      Alert.alert("Empty Story", "Please write something before submitting!");
+      showAlert("Please write something before submitting!");
       return;
     }
     if (!authReady || !userId) {
-      Alert.alert("Authentication Pending", "Please wait while we prepare for submission. If this persists, try restarting the app.");
+      showAlert("Please wait while we prepare for submission. If this persists, try restarting the app.");
       console.log("AddStoryScreen: Submission blocked. Not authenticated or auth not ready. userId:", userId, "authReady:", authReady); // Log auth status
       return;
     }
@@ -101,11 +123,11 @@ export default function AddStoryScreen({ navigation }) {
       setStoryText('');
       setSelectedTags(new Set());
       setCustomTag('');
-      Alert.alert("Success!", "Your story has been added to the feed!");
+      showAlert("Your story has been added to the feed!");
       navigation.goBack();
     } catch (error) {
       console.error("AddStoryScreen: Error adding story:", error); // Log the full error object
-      Alert.alert("Submission Failed", `There was an error adding your story: ${error.message || 'Unknown error'}. Please try again.`);
+      showAlert(`There was an error adding your story: ${error.message || 'Unknown error'}. Please try again.`);
     } finally {
       setLoading(false);
     }
@@ -120,16 +142,16 @@ export default function AddStoryScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Add Your Story</Text>
+        <Text style={styles.headerTitle}>Share Your Adventure</Text>
         <View style={styles.headerRightPlaceholder} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.promptText}>Share your financial wins, challenges, or thoughts!</Text>
+        <Text style={styles.promptText}>What have you discovered on your journey?</Text>
         <TextInput
           style={styles.textInput}
           placeholder="Type your story here..."
-          placeholderTextColor="#999"
+          placeholderTextColor="#7f8c8d"
           multiline
           value={storyText}
           onChangeText={setStoryText}
@@ -161,8 +183,8 @@ export default function AddStoryScreen({ navigation }) {
         {selectedTags.has('Other') && (
           <TextInput
             style={styles.customTagInput}
-            placeholder="Enter custom tag (e.g., 'Side Hustle')"
-            placeholderTextColor="#999"
+            placeholder="Enter custom tag (e.g., 'Side Quest')"
+            placeholderTextColor="#7f8c8d"
             value={customTag}
             onChangeText={setCustomTag}
             editable={!loading && authReady}
@@ -185,6 +207,12 @@ export default function AddStoryScreen({ navigation }) {
           <Text style={styles.authStatusText}>Authenticating... Please wait.</Text>
         )}
       </ScrollView>
+
+      <CustomAlert 
+        message={alertMessage}
+        visible={alertVisible}
+        onClose={() => setAlertVisible(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -192,28 +220,30 @@ export default function AddStoryScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f4f8',
+    backgroundColor: '#1c1c3c',
     paddingTop: 0,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    padding: 20,
+    backgroundColor: '#1c1c3c',
+    borderBottomWidth: 2,
+    borderBottomColor: '#FFD700',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: '#FFD700',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
   },
   backButton: {
     paddingRight: 15,
@@ -222,6 +252,9 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#3498db',
     fontWeight: 'bold',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   headerRightPlaceholder: {
     width: 24,
@@ -233,7 +266,7 @@ const styles = StyleSheet.create({
   },
   promptText: {
     fontSize: 18,
-    color: '#34495e',
+    color: '#e0e0e0',
     marginBottom: 20,
     textAlign: 'center',
     fontWeight: '600',
@@ -241,24 +274,24 @@ const styles = StyleSheet.create({
   textInput: {
     width: '100%',
     height: 150,
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
+    backgroundColor: '#2c3e50',
+    borderRadius: 15,
     padding: 15,
     fontSize: 16,
-    color: '#333',
-    borderColor: '#e0e0e0',
-    borderWidth: 1,
+    color: '#e0e0e0',
+    borderColor: '#556677',
+    borderWidth: 2,
     marginBottom: 20,
     textAlignVertical: 'top',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   tagsLabel: {
     fontSize: 16,
-    color: '#34495e',
+    color: '#FFD700',
     marginBottom: 10,
     alignSelf: 'flex-start',
     fontWeight: '600',
@@ -271,21 +304,21 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   tagButton: {
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#34495e',
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 20,
     marginRight: 8,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: '#556677',
   },
   selectedTagButton: {
     backgroundColor: '#3498db',
-    borderColor: '#3498db',
+    borderColor: '#8e44ad',
   },
   tagButtonText: {
-    color: '#555',
+    color: '#bdc3c7',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -294,19 +327,19 @@ const styles = StyleSheet.create({
   },
   customTagInput: {
     width: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
+    backgroundColor: '#2c3e50',
+    borderRadius: 15,
     padding: 15,
     fontSize: 16,
-    color: '#333',
-    borderColor: '#e0e0e0',
-    borderWidth: 1,
+    color: '#e0e0e0',
+    borderColor: '#556677',
+    borderWidth: 2,
     marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   submitButton: {
     backgroundColor: '#2ecc71',
@@ -318,13 +351,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.4,
     shadowRadius: 5,
     elevation: 5,
     marginTop: 10,
+    borderWidth: 2,
+    borderColor: '#27ae60',
   },
   submitButtonDisabled: {
-    backgroundColor: '#a0d9b5',
+    backgroundColor: '#95a5a6',
+    borderColor: '#7f8c8d',
   },
   submitButtonText: {
     color: '#ffffff',
@@ -335,5 +371,51 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 14,
     color: '#7f8c8d',
+  },
+});
+
+const alertStyles = StyleSheet.create({
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  container: {
+    backgroundColor: '#2c3e50',
+    borderRadius: 15,
+    padding: 20,
+    alignItems: 'center',
+    width: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+    borderWidth: 2,
+    borderColor: '#7f8c8d',
+  },
+  message: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#e0e0e0',
+  },
+  button: {
+    backgroundColor: '#3498db',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: '#8e44ad',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

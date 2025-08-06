@@ -1,6 +1,14 @@
 // LoginScreen.js
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import {
+  StyleSheet,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  Modal,
+} from 'react-native';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from './firebaseConfig'; // Use your shared auth instance
 
@@ -8,11 +16,22 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  // State for our custom alert modal
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+
+  // A helper function to show the custom alert modal
+  const showCustomAlert = (title, message) => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setModalVisible(true);
+  };
 
   const handleLogin = async () => {
     console.log("Login button pressed");
     if (!email || !password) {
-      Alert.alert("Input Error", "Please enter both email and password.");
+      showCustomAlert("Input Error", "Please enter both email and password.");
       return;
     }
 
@@ -20,6 +39,8 @@ export default function LoginScreen({ navigation }) {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       console.log("User logged in successfully!");
+      // Since login navigates away, we don't need a success message here,
+      // but it's good practice to have the function.
     } catch (error) {
       console.error("Login failed:", error.message);
 
@@ -43,7 +64,7 @@ export default function LoginScreen({ navigation }) {
         default:
           errorMessage = "Login failed. Please check your credentials.";
       }
-      Alert.alert("Login Error", errorMessage);
+      showCustomAlert("Login Error", errorMessage);
     } finally {
       setLoading(false);
     }
@@ -52,11 +73,11 @@ export default function LoginScreen({ navigation }) {
   const handleSignUp = async () => {
     console.log("Sign Up button pressed");
     if (!email || !password) {
-      Alert.alert("Input Error", "Please enter both email and password.");
+      showCustomAlert("Input Error", "Please enter both email and password.");
       return;
     }
     if (password.length < 6) {
-      Alert.alert("Password Too Short", "Password must be at least 6 characters long.");
+      showCustomAlert("Password Too Short", "Password must be at least 6 characters long.");
       return;
     }
 
@@ -64,7 +85,7 @@ export default function LoginScreen({ navigation }) {
     try {
       await createUserWithEmailAndPassword(auth, email, password);
       console.log("User signed up successfully!");
-      Alert.alert("Success!", "Account created! You are now logged in.");
+      showCustomAlert("Success!", "Account created! You are now logged in.");
     } catch (error) {
       console.error("Sign up failed:", error.message);
 
@@ -85,7 +106,7 @@ export default function LoginScreen({ navigation }) {
         default:
           errorMessage = `Sign up failed: ${error.message}`;
       }
-      Alert.alert("Sign Up Error", errorMessage);
+      showCustomAlert("Sign Up Error", errorMessage);
     } finally {
       setLoading(false);
     }
@@ -146,6 +167,29 @@ export default function LoginScreen({ navigation }) {
           <Text style={styles.buttonText}>Sign Up</Text>
         )}
       </TouchableOpacity>
+
+      {/* Custom Modal for displaying messages */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => {
+          setModalVisible(false);
+        }}
+      >
+        <View style={styles.centeredView}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalTitle}>{modalTitle}</Text>
+            <Text style={styles.modalText}>{modalMessage}</Text>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalCloseButton]}
+              onPress={() => setModalVisible(false)}
+            >
+              <Text style={styles.modalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -224,5 +268,56 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 18,
     fontWeight: '600',
+  },
+  // Custom Modal Styles
+  centeredView: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalView: {
+    margin: 20,
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 35,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    marginBottom: 15,
+    textAlign: "center",
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+  },
+  modalText: {
+    marginBottom: 15,
+    textAlign: "center",
+    fontSize: 16,
+    color: '#34495e',
+  },
+  modalButton: {
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    elevation: 2,
+    marginTop: 10,
+  },
+  modalCloseButton: {
+    backgroundColor: "#3498db",
+  },
+  modalButtonText: {
+    color: "white",
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: 16,
   },
 });

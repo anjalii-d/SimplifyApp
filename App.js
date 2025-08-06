@@ -36,7 +36,6 @@ export default function App() {
 
     const checkInitialStatus = async () => {
       try {
-        // First launch check
         const launchedBeforeValue = await AsyncStorage.getItem(HAS_LAUNCHED_BEFORE_KEY);
         const appHasLaunchedBefore = launchedBeforeValue === 'true';
         setHasLaunchedBefore(appHasLaunchedBefore);
@@ -45,12 +44,10 @@ export default function App() {
           await AsyncStorage.setItem(HAS_LAUNCHED_BEFORE_KEY, 'true');
         }
 
-        // Onboarding check
         const onboardingValue = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
         const onboardingIsComplete = onboardingValue === 'true';
         setIsOnboardingComplete(onboardingIsComplete);
 
-        // Firebase auth listener
         unsubscribeAuth = onAuthStateChanged(auth, (user) => {
           setIsLoggedIn(!!user);
           setIsLoadingInitialData(false);
@@ -80,17 +77,8 @@ export default function App() {
     }
   };
 
-  if (isLoadingInitialData || hasLaunchedBefore === null) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3498db" />
-        <Text style={styles.loadingText}>Loading app...</Text>
-      </View>
-    );
-  }
-
-  // Determine initial route explicitly based on state:
-  let initialRouteName = 'Login'; // default fallback
+  // Determine the initial route name based on the app's state.
+  let initialRouteName = 'Login'; // Default
   if (!hasLaunchedBefore) {
     initialRouteName = 'Splash';
   } else if (!isOnboardingComplete) {
@@ -99,6 +87,17 @@ export default function App() {
     initialRouteName = 'Home';
   }
 
+  // Show a loading screen while we determine the initial state.
+  if (isLoadingInitialData || hasLaunchedBefore === null) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FFD700" />
+        <Text style={styles.loadingText}>Loading app...</Text>
+      </View>
+    );
+  }
+
+  // The main app logic now uses a single navigator with a dynamic initialRouteName.
   return (
     <View style={styles.safeArea}>
       <NavigationContainer>
@@ -106,30 +105,22 @@ export default function App() {
           screenOptions={{ headerShown: false }}
           initialRouteName={initialRouteName}
         >
-          {isLoggedIn ? (
-            <>
-              <Stack.Screen name="Home" component={HomeScreen} />
-              <Stack.Screen name="AddStory" component={AddStoryScreen} />
-              <Stack.Screen name="RealityFeed" component={RealityFeedScreen} />
-              <Stack.Screen name="Money101" component={Money101Screen} />
-              <Stack.Screen name="PathPeek" component={PathPeekScreen} />
-              <Stack.Screen name="Profile" component={ProfileScreen} />
-              <Stack.Screen name="LessonDetail" component={LessonDetailScreen} />
-            </>
-          ) : !hasLaunchedBefore ? (
-            <Stack.Screen name="Splash" component={SplashScreen} />
-          ) : !isOnboardingComplete ? (
-            <Stack.Screen name="OnboardingSlideshow">
-              {props => (
-                <OnboardingSlideshow
-                  {...props}
-                  onOnboardingComplete={handleOnboardingComplete}
-                />
-              )}
-            </Stack.Screen>
-          ) : (
-            <Stack.Screen name="Login" component={LoginScreen} />
-          )}
+          {/* All screens are now defined in one place. */}
+          {/* This is the key change to ensure the navigation context is stable. */}
+          <Stack.Screen name="Splash" component={SplashScreen} />
+          <Stack.Screen name="OnboardingSlideshow">
+            {props => (
+              <OnboardingSlideshow {...props} onOnboardingComplete={handleOnboardingComplete} />
+            )}
+          </Stack.Screen>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="AddStoryScreen" component={AddStoryScreen} />
+          <Stack.Screen name="RealityFeedScreen" component={RealityFeedScreen} />
+          <Stack.Screen name="Money101Screen" component={Money101Screen} />
+          <Stack.Screen name="PathPeekScreen" component={PathPeekScreen} />
+          <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
+          <Stack.Screen name="LessonDetailScreen" component={LessonDetailScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </View>
@@ -139,7 +130,7 @@ export default function App() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f0f4f8',
+    backgroundColor: '#1c1c3c',
     width: '100%',
     height: '100%',
   },
@@ -147,11 +138,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f0f4f8',
+    backgroundColor: '#1c1c3c',
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#555',
+    color: '#e0e0e0',
   },
 });

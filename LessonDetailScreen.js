@@ -1,7 +1,35 @@
 // LessonDetailScreen.js
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image, TextInput } from 'react-native';
+import {
+  StyleSheet,
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Image,
+  TextInput,
+  Dimensions,
+  SafeAreaView
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const { width } = Dimensions.get('window');
+
+// Helper component for a custom alert box, replacing the native Alert
+const CustomAlert = ({ message, visible, onClose }) => {
+  if (!visible) return null;
+  return (
+    <View style={alertStyles.overlay}>
+      <View style={alertStyles.container}>
+        <Text style={alertStyles.message}>{message}</Text>
+        <TouchableOpacity onPress={onClose} style={alertStyles.button}>
+          <Text style={alertStyles.buttonText}>OK</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
 
 export default function LessonDetailScreen({ route, navigation }) {
   const { lesson, onLessonComplete } = route.params;
@@ -11,16 +39,25 @@ export default function LessonDetailScreen({ route, navigation }) {
   const [feedback, setFeedback] = useState(null); // { type: 'correct' | 'incorrect', message: string }
   const [quizScore, setQuizScore] = useState(0); // Track correct answers for XP
   const [xpAwardedForLesson, setXpAwardedForLesson] = useState(false); // To prevent multiple XP awards
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+
+  const showAlert = (message) => {
+    setAlertMessage(message);
+    setAlertVisible(true);
+  };
 
   // Check if lesson data is valid
   if (!lesson || !lesson.content) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Lesson data not found or is incomplete.</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>← Back</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Lesson data not found or is incomplete.</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.backButtonText}>← Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -36,9 +73,7 @@ export default function LessonDetailScreen({ route, navigation }) {
       const newXp = currentXp + amount;
       await AsyncStorage.setItem('userXP', newXp.toString());
       console.log(`XP updated: ${currentXp} + ${amount} = ${newXp}`);
-
-      // Optionally, show a toast or notification to the user about XP gained
-      Alert.alert("XP Gained!", `You earned ${amount} XP! Total XP: ${newXp}`);
+      showAlert(`You earned ${amount} XP! Total XP: ${newXp}`);
 
     } catch (e) {
       console.error("Failed to update XP in AsyncStorage", e);
@@ -66,17 +101,20 @@ export default function LessonDetailScreen({ route, navigation }) {
       setFeedback({ type: 'correct', message: feedbackMessage });
       setQuizScore(prevScore => prevScore + 1); // Increment quiz score
       if (xpForQuestion > 0) {
-        // Award XP immediately for correct answer (optional, could also be aggregated)
-        // addXp(xpForQuestion);
         // We'll aggregate XP and award at quiz completion to avoid too many alerts.
       }
     } else {
       feedbackMessage = 'Not quite. Review the highlighted content.';
       setFeedback({ type: 'incorrect', message: feedbackMessage });
     }
+  };
 
+  const handleNextQuestion = async () => {
     // If this is the last question, and it's correct, mark lesson as complete and award lesson XP
-    if (isCorrect && lesson.quiz && currentQuestionIndex === lesson.quiz.questions.length - 1) {
+    const isLastQuestion = lesson.quiz && currentQuestionIndex === lesson.quiz.questions.length - 1;
+    const isCorrect = feedback?.type === 'correct';
+
+    if (isLastQuestion && isCorrect) {
       try {
         const storedCompletedLessons = await AsyncStorage.getItem('completedLessons');
         const completedLessonsSet = storedCompletedLessons ? new Set(JSON.parse(storedCompletedLessons)) : new Set();
@@ -101,9 +139,8 @@ export default function LessonDetailScreen({ route, navigation }) {
         console.error("Failed to save completed lesson or award XP to AsyncStorage", e);
       }
     }
-  };
 
-  const handleNextQuestion = () => {
+    // After handling completion logic, move to the next question or show completion message
     setFeedback(null);
     setUserAnswer('');
     if (lesson.quiz && currentQuestionIndex < lesson.quiz.questions.length - 1) {
@@ -113,27 +150,20 @@ export default function LessonDetailScreen({ route, navigation }) {
       let completionMessage = "You've finished the quiz for this lesson!";
       if (lesson.quiz && lesson.quiz.questions.length > 0) {
           const totalQuestions = lesson.quiz.questions.length;
-          const finalQuizScore = quizScore + (feedback && feedback.type === 'correct' ? 1 : 0); // Add score for the last question if correct
+          const finalQuizScore = quizScore + (isCorrect ? 1 : 0); // Add score for the last question if correct
           completionMessage += ` You answered ${finalQuizScore} out of ${totalQuestions} questions correctly.`;
       }
       if (xpAwardedForLesson) {
           completionMessage += "\nXP for this lesson has been awarded!";
       }
 
-      Alert.alert(
-        "Quiz Complete!",
-        completionMessage,
-        [{
-          text: "OK", onPress: () => {
-            setCurrentQuestionIndex(0); // Reset for next time
-            setQuizScore(0); // Reset quiz score
-            setXpAwardedForLesson(false); // Reset XP awarded status
-            // navigation.goBack(); // Optionally navigate back
-          }
-        }]
-      );
+      showAlert(completionMessage);
+      setCurrentQuestionIndex(0); // Reset for next time
+      setQuizScore(0); // Reset quiz score
+      setXpAwardedForLesson(false); // Reset XP awarded status
     }
   };
+
 
   // Function to determine if a content paragraph should be highlighted
   const getParagraphStyle = (index) => {
@@ -149,8 +179,7 @@ export default function LessonDetailScreen({ route, navigation }) {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
+    <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Text style={styles.backButtonText}>←</Text>
@@ -247,44 +276,57 @@ export default function LessonDetailScreen({ route, navigation }) {
           </View>
         )}
       </ScrollView>
-    </View>
+      <CustomAlert 
+        message={alertMessage}
+        visible={alertVisible}
+        onClose={() => setAlertVisible(false)}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#1c1c3c',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f0f4f8',
-    paddingTop: 0,
+    backgroundColor: '#1c1c3c',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
     paddingVertical: 15,
     paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    backgroundColor: '#1c1c3c',
+    borderBottomWidth: 2,
+    borderBottomColor: '#FFD700',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
   },
   headerTitle: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: '#FFD700',
     flex: 1,
     textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
   },
   backButton: {
     paddingRight: 15,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
   },
   backButtonText: {
     fontSize: 24,
-    color: '#3498db',
+    color: '#FFD700',
     fontWeight: 'bold',
   },
   headerRightPlaceholder: {
@@ -297,20 +339,22 @@ const styles = StyleSheet.create({
   },
   lessonTime: {
     fontSize: 14,
-    color: '#7f8c8d',
+    color: '#bdc3c7',
     marginBottom: 20,
     textAlign: 'center',
   },
   lessonContentContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    padding: 15,
+    backgroundColor: '#2c3e50',
+    borderRadius: 15,
+    padding: 20,
     marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#556677',
   },
   contentItem: {
     marginBottom: 15,
@@ -318,7 +362,7 @@ const styles = StyleSheet.create({
   lessonText: {
     fontSize: 16,
     lineHeight: 24,
-    color: '#34495e',
+    color: '#e0e0e0',
   },
   imageContainer: {
     width: '100%',
@@ -327,7 +371,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginTop: 10,
     marginBottom: 10,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#556677',
   },
   lessonImage: {
     width: '100%',
@@ -339,61 +383,63 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   highlightedParagraph: {
-    backgroundColor: '#fff3cd',
+    backgroundColor: '#4a4a6b',
     borderRadius: 5,
     padding: 8,
-    borderWidth: 1,
-    borderColor: '#ffc107',
+    borderWidth: 2,
+    borderColor: '#FFD700',
   },
   quizSection: {
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    padding: 15,
+    backgroundColor: '#2c3e50',
+    borderRadius: 15,
+    padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#556677',
   },
   quizTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: '#FFD700',
     marginBottom: 15,
     textAlign: 'center',
   },
   questionText: {
-    fontSize: 16,
-    color: '#34495e',
+    fontSize: 18,
+    color: '#e0e0e0',
     marginBottom: 15,
   },
   optionsContainer: {
     marginBottom: 15,
   },
   optionButton: {
-    backgroundColor: '#f0f4f8',
+    backgroundColor: '#384d63',
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderWidth: 2,
+    borderColor: '#556677',
   },
   selectedOption: {
-    backgroundColor: '#d1e7dd',
-    borderColor: '#28a745',
+    backgroundColor: '#3498db',
+    borderColor: '#8e44ad',
   },
   optionText: {
-    fontSize: 15,
-    color: '#34495e',
+    fontSize: 16,
+    color: '#e0e0e0',
   },
   textInput: {
-    backgroundColor: '#f0f4f8',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
+    backgroundColor: '#384d63',
+    borderWidth: 2,
+    borderColor: '#556677',
+    borderRadius: 10,
     padding: 12,
-    fontSize: 15,
-    color: '#333',
+    fontSize: 16,
+    color: '#e0e0e0',
     marginBottom: 15,
   },
   feedbackText: {
@@ -403,44 +449,97 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 15,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   feedbackCorrect: {
-    color: '#155724',
-    backgroundColor: '#d4edda',
+    color: '#ffffff',
+    backgroundColor: '#27ae60',
   },
   feedbackIncorrect: {
-    color: '#721c24',
-    backgroundColor: '#f8d7da',
+    color: '#ffffff',
+    backgroundColor: '#c0392b',
   },
   submitButton: {
     backgroundColor: '#3498db',
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 20,
     alignItems: 'center',
     marginTop: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 10,
+    borderWidth: 3,
+    borderColor: '#8e44ad',
   },
   submitButtonText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
   },
   noQuestionsText: {
-    fontSize: 15,
-    color: '#7f8c8d',
+    fontSize: 16,
+    color: '#bdc3c7',
     textAlign: 'center',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f0f4f8',
+    backgroundColor: '#1c1c3c',
     padding: 20,
   },
   errorText: {
     fontSize: 18,
-    color: 'red',
+    color: '#e74c3c',
     textAlign: 'center',
     marginBottom: 20,
+  },
+});
+
+const alertStyles = StyleSheet.create({
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  container: {
+    backgroundColor: '#2c3e50',
+    borderRadius: 15,
+    padding: 20,
+    alignItems: 'center',
+    width: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+    borderWidth: 2,
+    borderColor: '#7f8c8d',
+  },
+  message: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#e0e0e0',
+  },
+  button: {
+    backgroundColor: '#3498db',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: '#8e44ad',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

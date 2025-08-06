@@ -1,236 +1,163 @@
 // RealityFeedScreen.js
-import React, { useState, useEffect, useCallback } from 'react'; // Added useCallback
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, Alert } from 'react-native'; // Added Alert
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, increment } from 'firebase/firestore';
-import { getAuth, onAuthStateChanged } from 'firebase/auth'; // Import onAuthStateChanged
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, View, Text, FlatList, TouchableOpacity, ActivityIndicator, SafeAreaView, RefreshControl, ScrollView } from 'react-native';
+import { collection, onSnapshot, doc, getDoc, updateDoc, query, where } from 'firebase/firestore';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db } from './firebaseConfig';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // Import AsyncStorage
+import { formatDistanceToNow } from 'date-fns';
 
-// Predefined tag options (matching AddStoryScreen.js, now including 'Other')
-const TAG_OPTIONS = ['Budgeting', 'Saving', 'Investing', 'Debt', 'Income', 'Goals', 'Challenge', 'Success', 'Learning', 'Other'];
+// Predefined tag options
+const TAG_OPTIONS = ['All', 'Budgeting', 'Saving', 'Investing', 'Debt', 'Income', 'Goals', 'Challenge', 'Success', 'Learning', 'Other'];
 
-// Key for AsyncStorage to store liked stories
-const LIKED_STORIES_KEY_PREFIX = '@SimplifyApp:likedStories:';
+// Helper component for a custom alert box, replacing the native Alert
+const CustomAlert = ({ message, visible, onClose }) => {
+  if (!visible) return null;
+  return (
+    <View style={alertStyles.overlay}>
+      <View style={alertStyles.container}>
+        <Text style={alertStyles.message}>{message}</Text>
+        <TouchableOpacity onPress={onClose} style={alertStyles.button}>
+          <Text style={alertStyles.buttonText}>OK</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
 
+// Main component for the Reality Feed screen
 export default function RealityFeedScreen({ navigation }) {
-  const [stories, setStories] = useState([]); // Stores all fetched stories
-  const [filteredStories, setFilteredStories] = useState([]); // Stores stories after applying filters
+  const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [activeFilter, setActiveFilter] = useState('latest'); // 'latest' or a specific tag
-  const [selectedFilterTag, setSelectedFilterTag] = useState(null); // New state for selected tag filter
-  const [likedStories, setLikedStories] = useState(new Set()); // Client-side tracking of liked stories by ID
-  const [userId, setUserId] = useState(null); // Current authenticated user ID
-  const [authReady, setAuthReady] = useState(false); // Flag to ensure auth is ready
+  const [refreshing, setRefreshing] = useState(false);
+  const [userId, setUserId] = useState(null);
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [selectedFilterTag, setSelectedFilterTag] = useState('All');
 
-  // 1. Firebase Auth Listener & Load Liked Stories from AsyncStorage
-  useEffect(() => {
-    const auth = getAuth();
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setUserId(user.uid);
-        console.log("RealityFeedScreen: User authenticated. UID:", user.uid);
-        // Load liked stories for this user
-        try {
-          const storedLikes = await AsyncStorage.getItem(`${LIKED_STORIES_KEY_PREFIX}${user.uid}`);
-          if (storedLikes) {
-            setLikedStories(new Set(JSON.parse(storedLikes)));
-            console.log("RealityFeedScreen: Loaded liked stories for user:", user.uid);
-          }
-        } catch (e) {
-          console.error("RealityFeedScreen: Failed to load liked stories from AsyncStorage", e);
-        }
-      } else {
-        setUserId(null);
-        setLikedStories(new Set()); // Clear likes if no user
-        console.log("RealityFeedScreen: No user authenticated.");
-      }
-      setAuthReady(true);
-      console.log("RealityFeedScreen: Auth state ready.");
-    });
-
-    return () => unsubscribeAuth();
-  }, []);
-
-  // 2. Effect to fetch all stories from Firestore (runs only when db and auth are ready)
-  useEffect(() => {
-    if (!db || !authReady) {
-      // console.log("RealityFeedScreen: Waiting for DB or Auth to be ready...");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-    const storiesCollectionRef = collection(db, `artifacts/${appId}/public/data/stories`);
-
-    const q = query(storiesCollectionRef, orderBy('timestamp', 'desc'));
-
-    const unsubscribeFirestore = onSnapshot(q, (snapshot) => {
-      const fetchedStories = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        fetchedStories.push({
-          id: doc.id,
-          text: data.text,
-          userId: data.userId || 'Anonymous',
-          timestamp: data.timestamp ? data.timestamp.toDate().toLocaleString() : 'N/A',
-          likes: data.likes || 0,
-          commentsCount: data.commentsCount || 0,
-          tags: data.tags || [],
-        });
-      });
-      setStories(fetchedStories);
-      setLoading(false);
-      console.log("RealityFeedScreen: Stories fetched from Firestore.");
-    }, (err) => {
-      console.error("RealityFeedScreen: Error fetching stories:", err);
-      setError("Failed to load stories. Please try again.");
-      setLoading(false);
-    });
-
-    return () => unsubscribeFirestore();
-  }, [db, authReady]); // Depend on db and authReady
-
-  // 3. Effect to filter stories whenever 'stories', 'activeFilter', or 'selectedFilterTag' changes
-  useEffect(() => {
-    let currentFilteredStories = [...stories];
-
-    if (activeFilter === 'tags' && selectedFilterTag) {
-      if (selectedFilterTag === 'Other') {
-        const predefinedTagsLower = TAG_OPTIONS.filter(tag => tag !== 'Other').map(tag => tag.toLowerCase());
-        currentFilteredStories = currentFilteredStories.filter(story =>
-          story.tags.some(storyTag => !predefinedTagsLower.includes(storyTag.toLowerCase()))
-        );
-      } else {
-        const filterTerm = selectedFilterTag.toLowerCase();
-        currentFilteredStories = currentFilteredStories.filter(story =>
-          story.tags.some(tag => tag.toLowerCase() === filterTerm)
-        );
-      }
-    }
-    setFilteredStories(currentFilteredStories);
-  }, [stories, activeFilter, selectedFilterTag]);
-
-  // 4. Handle Like Button Press (Updated for consistency and local persistence)
-  const handleLike = useCallback(async (storyId) => {
-    if (!authReady || !userId) {
-      Alert.alert("Login Required", "Please log in to like stories!");
-      return;
-    }
-
-    const storyRef = doc(db, `artifacts/${typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'}/public/data/stories`, storyId);
-
-    // Find the current story object from the filteredStories state for its current likes count
-    const currentStory = filteredStories.find(s => s.id === storyId);
-    if (!currentStory) {
-      console.warn("RealityFeedScreen: Story not found in local state for liking:", storyId);
-      return;
-    }
-
-    const isCurrentlyLiked = likedStories.has(storyId);
-    let updatePayload = {};
-    let optimisticChange = 0;
-
-    // Determine the change based on current like status
-    if (isCurrentlyLiked) {
-      // User wants to UNLIKE: only decrement if current likes > 0
-      if (currentStory.likes > 0) {
-        updatePayload = { likes: increment(-1) };
-        optimisticChange = -1;
-      } else {
-        // Already 0 likes, cannot go negative. No database update needed.
-        console.log("RealityFeedScreen: Attempted to unlike a story with 0 likes. No change.");
-        return; // Exit function, no update needed
-      }
-    } else {
-      // User wants to LIKE: always increment
-      updatePayload = { likes: increment(1) };
-      optimisticChange = 1;
-    }
-
-    // Optimistically update client-side state first for immediate UI feedback
-    setLikedStories(prevLikedStories => {
-      const newLikedStories = new Set(prevLikedStories);
-      if (isCurrentlyLiked) {
-        newLikedStories.delete(storyId);
-      } else {
-        newLikedStories.add(storyId);
-      }
-      // Save updated liked stories to AsyncStorage
-      AsyncStorage.setItem(`${LIKED_STORIES_KEY_PREFIX}${userId}`, JSON.stringify(Array.from(newLikedStories)))
-        .catch(e => console.error("RealityFeedScreen: Failed to save liked stories to AsyncStorage:", e));
-      return newLikedStories;
-    });
-
-    setFilteredStories(prevFilteredStories =>
-      prevFilteredStories.map(story =>
-        story.id === storyId
-          ? { ...story, likes: story.likes + optimisticChange }
-          : story
-      )
-    );
-
-    try {
-      // Perform the Firestore update
-      await updateDoc(storyRef, updatePayload);
-      console.log(`RealityFeedScreen: Like status updated for story ${storyId}. Change: ${optimisticChange}`);
-    } catch (error) {
-      console.error("RealityFeedScreen: Error updating like in Firestore:", error);
-      Alert.alert("Like Failed", "Could not update like. Please try again.");
-
-      // Revert optimistic updates if Firestore update fails
-      setLikedStories(prevLikedStories => {
-        const newLikedStories = new Set(prevLikedStories);
-        if (isCurrentlyLiked) { // If we tried to unlike, but it failed, re-add it
-          newLikedStories.add(storyId);
-        } else { // If we tried to like, but it failed, remove it
-          newLikedStories.delete(storyId);
-        }
-        AsyncStorage.setItem(`${LIKED_STORIES_KEY_PREFIX}${userId}`, JSON.stringify(Array.from(newLikedStories)))
-          .catch(e => console.error("RealityFeedScreen: Failed to revert liked stories in AsyncStorage:", e));
-        return newLikedStories;
-      });
-      setFilteredStories(prevFilteredStories =>
-        prevFilteredStories.map(story =>
-          story.id === storyId
-            ? { ...story, likes: story.likes - optimisticChange }
-            : story
-        )
-      );
-    }
-  }, [db, filteredStories, likedStories, authReady, userId]); // Dependencies for useCallback
-
-  // Handle Comment Button Press
-  const handleComment = (storyId) => {
-    console.log(`Navigating to comments for story: ${storyId}`);
-    // In a real app, you would navigate to a StoryDetailScreen or CommentScreen here:
-    // navigation.navigate('StoryDetail', { storyId: storyId });
-    Alert.alert("Comment Feature", "Comment feature coming soon! You'd go to a detailed story view here.");
+  // Function to show the custom alert
+  const showAlert = (message) => {
+    setAlertMessage(message);
+    setAlertVisible(true);
   };
 
+  // Firebase Auth listener to get the current user ID
+  useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        setUserId(currentUser.uid);
+      } else {
+        setUserId(null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Function to fetch stories from Firestore
+  const fetchStories = useCallback(() => {
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const collectionPath = `artifacts/${appId}/public/data/stories`;
+
+    let storiesQuery = collection(db, collectionPath);
+
+    // Apply a filter based on the selected tag
+    if (selectedFilterTag && selectedFilterTag !== 'All') {
+      storiesQuery = query(storiesQuery, where('tags', 'array-contains', selectedFilterTag));
+    }
+
+    const unsubscribe = onSnapshot(storiesQuery, (querySnapshot) => {
+      const fetchedStories = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      const sortedStories = fetchedStories.sort((a, b) => {
+        const aTimestamp = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(0);
+        const bTimestamp = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(0);
+        return bTimestamp - aTimestamp;
+      });
+      
+      setStories(sortedStories);
+      setLoading(false);
+      setRefreshing(false);
+    }, (error) => {
+      console.error("Error fetching stories:", error);
+      showAlert("Failed to load stories. Please check your connection.");
+      setLoading(false);
+      setRefreshing(false);
+    });
+
+    return () => unsubscribe();
+  }, [selectedFilterTag]);
+
+  useEffect(() => {
+    fetchStories();
+  }, [fetchStories]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchStories();
+  }, [fetchStories]);
+
+  // Function to handle liking a story
+  const handleLike = async (storyId, currentLikes) => {
+    if (!userId) {
+      showAlert("You must be logged in to like stories.");
+      return;
+    }
+
+    try {
+      const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+      const storyRef = doc(db, `artifacts/${appId}/public/data/stories`, storyId);
+      const storyDoc = await getDoc(storyRef);
+
+      if (storyDoc.exists()) {
+        const likedBy = storyDoc.data().likedBy || [];
+        let newLikes = currentLikes;
+        let newLikedBy = [...likedBy];
+
+        if (newLikedBy.includes(userId)) {
+          newLikes -= 1;
+          newLikedBy = newLikedBy.filter(uid => uid !== userId);
+        } else {
+          newLikes += 1;
+          newLikedBy.push(userId);
+        }
+
+        await updateDoc(storyRef, {
+          likes: newLikes,
+          likedBy: newLikedBy,
+        });
+      }
+    } catch (error) {
+      console.error("Error updating like:", error);
+      showAlert("Failed to like the story. Please try again.");
+    }
+  };
+
+  // Render each story item in the list
   const renderStoryItem = ({ item }) => {
-    const isLiked = likedStories.has(item.id); // Check if this story is liked by current user
+    const isLiked = item.likedBy && item.likedBy.includes(userId);
     return (
       <View style={styles.storyCard}>
-        <Text style={styles.storyContent}>{item.text}</Text>
+        <Text style={styles.storyText}>{item.text}</Text>
         <View style={styles.tagsContainer}>
-          {item.tags.map((tag, index) => (
-            <Text key={index} style={styles.tagText}>#{tag}</Text>
+          {item.tags && item.tags.map((tag, index) => (
+            <Text key={index} style={styles.tagText}>{tag}</Text>
           ))}
         </View>
         <View style={styles.storyFooter}>
-          <Text style={styles.storyMeta}>Posted by: {item.userId.substring(0, 8)}...</Text>
-          <Text style={styles.storyMeta}>{item.timestamp}</Text>
+          <Text style={styles.userInfoText}>Adventurer ID: {item.userId.substring(0, 8)}...</Text>
+          <Text style={styles.timestampText}>
+            {item.timestamp ? formatDistanceToNow(item.timestamp.toDate(), { addSuffix: true }) : 'just now'}
+          </Text>
         </View>
-        <View style={styles.storyActions}>
-          <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(item.id)}>
-            <Text style={[styles.actionText, isLiked && styles.likedActionText]}>
-              {isLiked ? '❤️' : '🤍'} {item.likes}
-            </Text>
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity onPress={() => handleLike(item.id, item.likes)}>
+            <Text style={styles.actionText}>{isLiked ? '❤️' : '🤍'} {item.likes}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={() => handleComment(item.id)}>
+          <TouchableOpacity onPress={() => showAlert("Comments feature is coming soon!")}>
             <Text style={styles.actionText}>💬 {item.commentsCount}</Text>
           </TouchableOpacity>
         </View>
@@ -238,241 +165,176 @@ export default function RealityFeedScreen({ navigation }) {
     );
   };
 
-  const handleAddStory = () => {
-    navigation.navigate('AddStory');
-  };
-
-  const handleFilterChange = (filterType, tag = null) => {
-    if (filterType === 'latest') {
-      setActiveFilter('latest');
-      setSelectedFilterTag(null); // Clear selected tag
-    } else if (filterType === 'tags') {
-      setActiveFilter('tags');
-      setSelectedFilterTag(tag); // Set the specific tag to filter by
-    }
-  };
-
-  // Component to render at the bottom of the FlatList
-  const ListFooter = () => (
-    <View style={styles.listFooterContainer}>
-      <TouchableOpacity style={styles.addStoryButton} onPress={handleAddStory}>
-        <Text style={styles.addStoryButtonText}>+ Add your own</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3498db" />
-        <Text style={styles.loadingText}>Loading stories...</Text>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>{error}</Text>
-      </View>
-    );
-  }
-
   return (
-    <View style={styles.container}>
-      {/* Header with Search Icon (now more of a general 'filter' icon) */}
+    <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Reality Feed</Text>
-        {/* You can keep or remove this icon, it's less critical now */}
-        <TouchableOpacity onPress={() => console.log("Filter options are below!")} style={styles.searchIcon}>
-          <Text style={styles.searchIconText}>⚙️</Text>
+        <Text style={styles.headerTitle}>The Village Board</Text>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => navigation.navigate('AddStoryScreen')}
+        >
+          <Text style={styles.addButtonText}>+</Text>
         </TouchableOpacity>
       </View>
-
-      {/* Filters Section */}
-      <View style={styles.filtersSection}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterButtonsScrollView}>
+      
+      <ScrollView horizontal style={styles.tagFilterScrollView} contentContainerStyle={styles.tagFilterContainer}>
+        {TAG_OPTIONS.map(tag => (
           <TouchableOpacity
-            style={[
-              styles.filterButton,
-              activeFilter === 'latest' && styles.activeFilterButton,
-            ]}
-            onPress={() => handleFilterChange('latest')}
+            key={tag}
+            style={[styles.filterTagButton, selectedFilterTag === tag && styles.selectedFilterTagButton]}
+            onPress={() => setSelectedFilterTag(tag)}
           >
-            <Text style={[
-              styles.filterButtonText,
-              activeFilter === 'latest' && styles.activeFilterButtonText,
-            ]}>
-              Latest
-            </Text>
+            <Text style={[styles.filterTagText, selectedFilterTag === tag && styles.selectedFilterTagText]}>{tag}</Text>
           </TouchableOpacity>
+        ))}
+      </ScrollView>
 
-          {TAG_OPTIONS.map((tag) => (
-            <TouchableOpacity
-              key={tag}
-              style={[
-                styles.filterButton,
-                activeFilter === 'tags' && selectedFilterTag === tag && styles.activeFilterButton,
-              ]}
-              onPress={() => handleFilterChange('tags', tag)}
-            >
-              <Text style={[
-                styles.filterButtonText,
-                activeFilter === 'tags' && selectedFilterTag === tag && styles.activeFilterButtonText,
-              ]}>
-                #{tag}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Anonymous Stories List */}
-      {filteredStories.length === 0 && !loading ? (
-        <Text style={styles.noStoriesText}>
-          {activeFilter === 'tags' && selectedFilterTag
-            ? `No stories found for ${selectedFilterTag === 'Other' ? 'custom tags' : '#' + selectedFilterTag}.`
-            : "No stories yet. Be the first to share!"}
-        </Text>
+      {loading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#FFD700" />
+        </View>
       ) : (
         <FlatList
-          data={filteredStories}
+          data={stories}
+          keyExtractor={(item) => item.id}
           renderItem={renderStoryItem}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.flatListContent}
-          style={styles.storiesList}
-          ListFooterComponent={ListFooter} // Add the ListFooterComponent here
+          contentContainerStyle={styles.listContainer}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={onRefresh} 
+              tintColor="#FFD700" 
+              colors={["#FFD700"]}
+            />
+          }
         />
       )}
-    </View>
+
+      <CustomAlert 
+        message={alertMessage}
+        visible={alertVisible}
+        onClose={() => setAlertVisible(false)}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    width: '100%',
-    backgroundColor: '#ecf0f1',
-    paddingTop: 0,
+    backgroundColor: '#1c1c3c', // Dark blue background from HomeScreen
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ecf0f1',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#555',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ecf0f1',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    color: 'red',
-    textAlign: 'center',
-  },
-  // Header Styles
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    padding: 20,
+    backgroundColor: '#1c1c3c',
+    borderBottomWidth: 2,
+    borderBottomColor: '#FFD700', // Gold border from HomeScreen
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: '#FFD700', // Gold title from HomeScreen
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
   },
-  searchIcon: {
-    padding: 5,
+  addButton: {
+    backgroundColor: '#3498db', // Blue button from HomeScreen
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 10,
+    borderWidth: 3,
+    borderColor: '#8e44ad', // Purple border from HomeScreen
   },
-  searchIconText: {
+  addButtonText: {
+    color: '#ffffff',
     fontSize: 24,
-    color: '#2c3e50',
+    fontWeight: 'bold',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
-  // Filters Section Styles
-  filtersSection: {
-    backgroundColor: '#ffffff',
+  tagFilterScrollView: {
     paddingVertical: 10,
+    paddingHorizontal: 5,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    marginBottom: 10,
+    borderBottomColor: '#556677',
   },
-  filterButtonsScrollView: {
-    paddingHorizontal: 15, // Padding for the horizontal scroll view
+  tagFilterContainer: {
+    alignItems: 'center',
   },
-  filterButton: {
-    backgroundColor: '#f0f0f0',
+  filterTagButton: {
+    backgroundColor: '#34495e',
     paddingVertical: 8,
     paddingHorizontal: 15,
     borderRadius: 20,
-    marginRight: 10,
+    marginHorizontal: 5,
+    borderWidth: 1,
+    borderColor: '#556677',
   },
-  activeFilterButton: {
+  selectedFilterTagButton: {
     backgroundColor: '#3498db',
+    borderColor: '#8e44ad',
   },
-  filterButtonText: {
-    color: '#555',
+  filterTagText: {
+    color: '#bdc3c7',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
   },
-  activeFilterButtonText: {
+  selectedFilterTagText: {
     color: '#ffffff',
+    fontWeight: 'bold',
   },
-  // Stories List Styles
-  storiesList: {
-    flex: 1,
-    width: '100%',
-  },
-  flatListContent: {
-    paddingHorizontal: 10,
-    paddingBottom: 20, // Add some padding here to ensure space above the global nav
+  listContainer: {
+    padding: 15,
   },
   storyCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    padding: 15,
+    backgroundColor: '#2c3e50', // Darker card background from HomeScreen
+    borderRadius: 15,
+    padding: 20,
     marginBottom: 15,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#556677', // Border color from HomeScreen
   },
-  storyContent: {
+  storyText: {
     fontSize: 16,
-    color: '#34495e',
+    color: '#e0e0e0', // Lighter text color for contrast
     lineHeight: 24,
     marginBottom: 10,
   },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    marginTop: 5,
     marginBottom: 10,
   },
   tagText: {
+    backgroundColor: '#34495e', // Darker tag background
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     fontSize: 12,
-    color: '#7f8c8d',
-    backgroundColor: '#e0e0e0',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 5,
+    color: '#bdc3c7', // Light gray text
     marginRight: 5,
     marginBottom: 5,
   },
@@ -480,62 +342,77 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 5,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: '#556677', // Lighter border color for separation
     paddingTop: 10,
   },
-  storyMeta: {
+  userInfoText: {
+    fontSize: 12,
+    color: '#FFD700', // Gold color for user ID
+    fontWeight: 'bold',
+  },
+  timestampText: {
     fontSize: 12,
     color: '#7f8c8d',
   },
-  storyActions: {
+  actionsContainer: {
     flexDirection: 'row',
+    justifyContent: 'flex-start',
     marginTop: 10,
   },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 15,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 15,
-    backgroundColor: '#f8f8f8',
-  },
   actionText: {
-    fontSize: 14,
-    color: '#3498db',
-    fontWeight: 'bold',
-  },
-  likedActionText: {
-    color: '#e74c3c', // Red color for liked heart
-  },
-  noStoriesText: {
     fontSize: 16,
-    color: '#7f8c8d',
-    textAlign: 'center',
-    marginTop: 50,
+    color: '#2ecc71', // Green color for actions
+    marginRight: 20,
   },
-  // Styles for the new ListFooterComponent
-  listFooterContainer: {
-    paddingVertical: 20, // Padding around the button within the footer
-    alignItems: 'center', // Center the button
-  },
-  addStoryButton: {
-    backgroundColor: '#2ecc71',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    width: '80%', // Make it a reasonable width
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+  }
+});
+
+const alertStyles = StyleSheet.create({
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  addStoryButtonText: {
-    color: '#ffffff',
+  container: {
+    backgroundColor: '#2c3e50',
+    borderRadius: 15,
+    padding: 20,
+    alignItems: 'center',
+    width: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+    borderWidth: 2,
+    borderColor: '#7f8c8d',
+  },
+  message: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#e0e0e0',
+  },
+  button: {
+    backgroundColor: '#3498db',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: '#8e44ad',
+  },
+  buttonText: {
+    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
