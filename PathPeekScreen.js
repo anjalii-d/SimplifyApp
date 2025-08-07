@@ -8,9 +8,9 @@ import {
   ScrollView,
   Dimensions,
   SafeAreaView,
-  BackHandler // Import BackHandler for Android
+  BackHandler
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native'; // Import useFocusEffect
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 
@@ -96,7 +96,7 @@ const careerCategories = [
     id: 'education',
     name: 'Education',
     description: 'Shape young minds as a teacher, professor, or educational administrator.',
-    emoji: '�',
+    emoji: '📚',
     color: '#e74c3c',
     locationSalaries: {
       'Major City': 70000,
@@ -116,7 +116,7 @@ const careerCategories = [
     name: 'Skilled Trades',
     description: 'Work with your hands in fields like plumbing, electrical, carpentry, or mechanics.',
     emoji: '🔧',
-    color: '#FFD700', // Using the gold theme color
+    color: '#FFD700',
     locationSalaries: {
       'Major City': 65000,
       'Mid-sized City': 55000,
@@ -141,10 +141,17 @@ const formatCurrency = (amount) => {
   }).format(amount);
 };
 
-export default function PathPeekScreen({ navigation }) {
+export default function PathPeekScreen() {
+  const navigation = useNavigation();
   const [currentView, setCurrentView] = useState('cloud');
   const [selectedCareer, setSelectedCareer] = useState(null);
   const [selectedCostLocation, setSelectedCostLocation] = useState('Major City');
+
+  const handleGoHome = () => {
+    // We'll use this console log to see if the function is even being called.
+    console.log("Attempting to navigate to 'Home'...");
+    navigation.navigate('Home');
+  };
 
   const handleCareerPress = (career) => {
     setSelectedCareer(career);
@@ -156,44 +163,29 @@ export default function PathPeekScreen({ navigation }) {
     setSelectedCostLocation(locType);
   };
 
-  // Available location types for the buttons
   const locationTypes = ['Major City', 'Mid-sized City', 'Suburban Area', 'Rural Area'];
 
-  // This hook runs whenever the screen is focused or unfocused.
-  // We use it to manage the hardware back button on Android.
   useFocusEffect(
     React.useCallback(() => {
-      // Define the behavior for the Android hardware back button
       const onBackPress = () => {
         if (currentView === 'detail') {
-          // If we are in the detail view, pressing back should return to the career cloud
           setCurrentView('cloud');
-          return true; // Prevents default behavior (e.g., exiting the app)
+          return true; // Prevents default navigation stack behavior.
         } else {
-          // If we are in the career cloud view, allow the default behavior, which
-          // is to go back to the previous screen on the navigation stack
           return false;
         }
       };
-
-      // Add the event listener when the screen is focused
       BackHandler.addEventListener('hardwareBackPress', onBackPress);
-
-      // Return a cleanup function to remove the listener when the screen is unfocused
-      return () =>
-        BackHandler.removeEventListener('hardwareBackPress', onBackPress);
-    }, [currentView]) // Re-run this effect if the currentView state changes
+      return () => BackHandler.removeEventListener('hardwareBackPress', onBackPress);
+    }, [currentView])
   );
 
   const renderCareerCloud = () => (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.homeButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.homeButtonText}>← Go Back</Text>
-        </TouchableOpacity>
+        <View style={{ width: 60 }} />
         <Text style={styles.headerTitle}>Path Peek</Text>
-        {/* Added a Home button for consistent navigation */}
-        <TouchableOpacity style={styles.homeButton} onPress={() => navigation.navigate('Home')}>
+        <TouchableOpacity style={styles.homeButton} onPress={handleGoHome}>
           <Text style={styles.homeButtonText}>🏠 Hub</Text>
         </TouchableOpacity>
       </View>
@@ -229,13 +221,11 @@ export default function PathPeekScreen({ navigation }) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          {/* This button returns to the career cloud by changing local state */}
           <TouchableOpacity onPress={() => setCurrentView('cloud')} style={styles.homeButton}>
             <Text style={styles.homeButtonText}>← Map</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{selectedCareer.name}</Text>
-          {/* This button goes all the way back to the main navigation stack */}
-          <TouchableOpacity style={styles.homeButton} onPress={() => navigation.navigate('Home')}>
+          <TouchableOpacity style={styles.homeButton} onPress={handleGoHome}>
             <Text style={styles.homeButtonText}>🏠 Hub</Text>
           </TouchableOpacity>
         </View>
@@ -246,7 +236,6 @@ export default function PathPeekScreen({ navigation }) {
             <Text style={styles.detailDescription}>{selectedCareer.description}</Text>
           </View>
 
-          {/* Location Buttons */}
           <Text style={styles.sectionHeading}>Choose Your Kingdom:</Text>
           <View style={styles.locationButtonsContainer}>
             {locationTypes.map((locType) => (
@@ -270,7 +259,6 @@ export default function PathPeekScreen({ navigation }) {
             ))}
           </View>
 
-          {/* New visual comparison - Thematic Bar Chart */}
           <View style={styles.visualCard}>
             <Text style={styles.cardTitle}>📊 Hero's Gold Ledger</Text>
             <View style={styles.barChartContainer}>
