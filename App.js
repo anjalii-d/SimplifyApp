@@ -1,12 +1,12 @@
 // App.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, SafeAreaView } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Firebase
-import { auth } from './firebaseConfig';
+// Firebase helper
+import { getFirebaseAuth } from './firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 
 // Screens
@@ -22,16 +22,18 @@ import ProfileScreen from './ProfileScreen';
 import LessonDetailScreen from './LessonDetailScreen';
 
 const Stack = createStackNavigator();
+
 const ONBOARDING_COMPLETED_KEY = '@SimplifyApp:onboardingCompleted';
 const HAS_LAUNCHED_BEFORE_KEY = '@SimplifyApp:hasLaunchedBefore';
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isOnboardingComplete, setIsOnboardingComplete] = useState(false);
-  const [hasLaunchedBefore, setHasLaunchedBefore] = useState(null); // null = not yet checked
+  const [hasLaunchedBefore, setHasLaunchedBefore] = useState(null);
   const [isLoadingInitialData, setIsLoadingInitialData] = useState(true);
 
   useEffect(() => {
+    const auth = getFirebaseAuth();
     let unsubscribeAuth;
 
     const checkInitialStatus = async () => {
@@ -53,7 +55,7 @@ export default function App() {
           setIsLoadingInitialData(false);
         });
       } catch (e) {
-        console.error("App.js: Failed to load app status:", e);
+        console.error('App.js: Failed to load app status:', e);
         setHasLaunchedBefore(true);
         setIsOnboardingComplete(false);
         setIsLoggedIn(false);
@@ -73,12 +75,12 @@ export default function App() {
       await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true');
       setIsOnboardingComplete(true);
     } catch (e) {
-      console.error("Failed to save onboarding status to AsyncStorage", e);
+      console.error('Failed to save onboarding status to AsyncStorage', e);
     }
   };
 
-  // Determine the initial route name based on the app's state.
-  let initialRouteName = 'Login'; // Default
+  // Determine initial route
+  let initialRouteName = 'Login';
   if (!hasLaunchedBefore) {
     initialRouteName = 'Splash';
   } else if (!isOnboardingComplete) {
@@ -87,7 +89,7 @@ export default function App() {
     initialRouteName = 'Home';
   }
 
-  // Show a loading screen while we determine the initial state.
+  // Show loading spinner until AsyncStorage & auth check complete
   if (isLoadingInitialData || hasLaunchedBefore === null) {
     return (
       <View style={styles.loadingContainer}>
@@ -97,16 +99,10 @@ export default function App() {
     );
   }
 
-  // The main app logic now uses a single navigator with a dynamic initialRouteName.
   return (
-    <View style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea}>
       <NavigationContainer>
-        <Stack.Navigator
-          screenOptions={{ headerShown: false }}
-          initialRouteName={initialRouteName}
-        >
-          {/* All screens are now defined in one place. */}
-          {/* This is the key change to ensure the navigation context is stable. */}
+        <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
           <Stack.Screen name="Splash" component={SplashScreen} />
           <Stack.Screen name="OnboardingSlideshow">
             {props => (
@@ -123,26 +119,12 @@ export default function App() {
           <Stack.Screen name="LessonDetailScreen" component={LessonDetailScreen} />
         </Stack.Navigator>
       </NavigationContainer>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#1c1c3c',
-    width: '100%',
-    height: '100%',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#1c1c3c',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#e0e0e0',
-  },
+  safeArea: { flex: 1, backgroundColor: '#1c1c3c' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1c1c3c' },
+  loadingText: { marginTop: 10, fontSize: 16, color: '#e0e0e0' },
 });
