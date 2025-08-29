@@ -4,10 +4,8 @@ import { View, Text, ActivityIndicator, StyleSheet, SafeAreaView } from 'react-n
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Firebase helper
-import { getFirebaseAuth } from './firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
+import { getFirebaseAuth } from './firebaseConfig';
 
 // Screens
 import SplashScreen from './SplashScreen';
@@ -38,6 +36,7 @@ export default function App() {
 
     const checkInitialStatus = async () => {
       try {
+        // Check first launch
         const launchedBeforeValue = await AsyncStorage.getItem(HAS_LAUNCHED_BEFORE_KEY);
         const appHasLaunchedBefore = launchedBeforeValue === 'true';
         setHasLaunchedBefore(appHasLaunchedBefore);
@@ -46,10 +45,12 @@ export default function App() {
           await AsyncStorage.setItem(HAS_LAUNCHED_BEFORE_KEY, 'true');
         }
 
+        // Check onboarding completion
         const onboardingValue = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
         const onboardingIsComplete = onboardingValue === 'true';
         setIsOnboardingComplete(onboardingIsComplete);
 
+        // Listen for auth changes
         unsubscribeAuth = onAuthStateChanged(auth, (user) => {
           setIsLoggedIn(!!user);
           setIsLoadingInitialData(false);
