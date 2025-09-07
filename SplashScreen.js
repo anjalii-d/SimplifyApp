@@ -1,4 +1,3 @@
-// SplashScreen.js
 import React, { useEffect, useRef } from "react";
 import {
   View,
@@ -15,9 +14,10 @@ import { onAuthStateChanged } from "firebase/auth";
 
 export default function SplashScreen({ navigation }) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const auth = getFirebaseAuth(); // 🔑 Use helper function
 
   useEffect(() => {
+    const auth = getFirebaseAuth(); // ✅ Moved inside useEffect
+
     // Pulsing animation for button
     Animated.loop(
       Animated.sequence([
