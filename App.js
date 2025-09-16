@@ -63,7 +63,8 @@ export default function App() {
           setIsLoggedIn(!!user);
           setIsLoadingInitialData(false);
         });
-      } catch (e) {
+      } catch (e) {npm install
+
         console.error("App.js init error:", e);
         setHasLaunchedBefore(true);
         setIsOnboardingComplete(false);
